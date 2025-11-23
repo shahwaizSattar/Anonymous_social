@@ -9,12 +9,17 @@ import {
   FlatList,
   Dimensions,
   RefreshControl,
+  StatusBar,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { postsAPI } from '../../services/api';
+import LogoutAnimation from '../../components/LogoutAnimation';
+import { convertAvatarUrl } from '../../utils/imageUtils';
 // import { VideoView } from 'expo-video';
 
 const ProfileScreen: React.FC = () => {
@@ -24,6 +29,7 @@ const ProfileScreen: React.FC = () => {
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showLogoutAnimation, setShowLogoutAnimation] = useState(false);
 
   const loadUserPosts = async () => {
     if (!user?.username) {
@@ -323,9 +329,11 @@ const ProfileScreen: React.FC = () => {
   ];
 
   return (
-    <ScrollView 
-      style={styles.container}
-      refreshControl={
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
+      <ScrollView 
+        style={styles.container}
+        refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
@@ -336,7 +344,7 @@ const ProfileScreen: React.FC = () => {
         {/* Avatar */}
         <View style={styles.avatarContainer}>
           {user?.avatar ? (
-            <Image source={{ uri: user.avatar }} style={{ width: 100, height: 100, borderRadius: 50 }} />
+            <Image source={{ uri: convertAvatarUrl(user.avatar) || '' }} style={{ width: 100, height: 100, borderRadius: 50 }} />
           ) : (
             <Text style={styles.avatarText}>
               {user?.username?.charAt(0).toUpperCase() || '?'}
@@ -449,13 +457,23 @@ const ProfileScreen: React.FC = () => {
         {/* Logout Button */}
         <TouchableOpacity
           style={[styles.menuItem, styles.logoutButton]}
-          onPress={logout}
+          onPress={() => setShowLogoutAnimation(true)}
         >
           <Text style={[styles.menuIcon, styles.logoutText]}>🚪</Text>
           <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
+    <LogoutAnimation
+      visible={showLogoutAnimation}
+      onComplete={async () => {
+        setShowLogoutAnimation(false);
+        await logout();
+      }}
+      avatar={user?.avatar}
+      username={user?.username}
+    />
+    </SafeAreaView>
   );
 };
 

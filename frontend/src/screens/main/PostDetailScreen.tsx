@@ -9,14 +9,17 @@ import {
   ActivityIndicator,
   Image,
   ImageResizeMode,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { postsAPI } from '../../services/api';
 import { reactionsAPI } from '../../services/reactions';
-import { RouteProp, useRoute } from '@react-navigation/native';
+import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/navigation';
 import Toast from 'react-native-toast-message';
+import { convertAvatarUrl } from '../../utils/imageUtils';
 // import { VideoView } from 'expo-video';
 
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetail'>;
@@ -99,6 +102,7 @@ interface Post {
 
 const PostDetailScreen = () => {
   const route = useRoute<PostDetailScreenRouteProp>();
+  const navigation = useNavigation();
   const { postId } = route.params;
   const { theme } = useTheme();
   const { user } = useAuth();
@@ -325,24 +329,59 @@ const PostDetailScreen = () => {
 
   const fetchPost = async () => {
     try {
+      setLoading(true);
+      console.log('Fetching post with ID:', postId);
+      
+      if (!postId) {
+        console.error('PostId is undefined or empty');
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Post ID is missing',
+        });
+        setLoading(false);
+        return;
+      }
+      
       const response = await postsAPI.getPost(postId);
+      console.log('Post API response:', JSON.stringify(response, null, 2));
+      
+      // Handle different response structures
+      // Backend returns: { success: true, post: {...} }
+      // Some APIs might return: { success: true, data: {...} }
+      let postData = null;
       if (response.success) {
-        setPost(response.data);
-        const transformedComments: CommentItem[] = response.data.comments.map((comment: any) => ({
+        postData = response.post || response.data;
+      }
+      
+      if (postData) {
+        console.log('Post data found:', postData);
+        setPost(postData);
+        const comments = postData.comments || [];
+        const transformedComments: CommentItem[] = comments.map((comment: any) => ({
           type: 'comment',
           _id: comment._id,
           author: comment.author,
-          content: comment.content,
+          content: comment.content || comment.text,
           createdAt: comment.createdAt
         }));
         setData(transformedComments);
+      } else {
+        console.error('Post not found or invalid response:', response);
+        Toast.show({
+          type: 'error',
+          text1: 'Post not found',
+          text2: response.message || 'The post you are looking for does not exist',
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching post:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to load post details';
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to load post details',
+        text2: errorMessage,
       });
     } finally {
       setLoading(false);
@@ -462,18 +501,70 @@ const PostDetailScreen = () => {
     );
   }
 
-  if (!post) {
+  if (!post && !loading) {
     return (
-      <View style={styles.errorContainer}>
-        <Text style={[styles.errorText, { color: theme.colors.text }]}>
-          Post not found
-        </Text>
-      </View>
+      <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+        <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
+        {/* Header with Back Button */}
+        <View style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+          backgroundColor: theme.colors.surface,
+          borderBottomWidth: 1,
+          borderBottomColor: theme.colors.border,
+        }}>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={{ marginRight: 12 }}
+          >
+            <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 16 }}>← Back</Text>
+          </TouchableOpacity>
+          <Text style={{ fontSize: 18, fontWeight: '600', color: theme.colors.text }}>Post</Text>
+        </View>
+        <View style={styles.errorContainer}>
+          <Text style={[styles.errorText, { color: theme.colors.text }]}>
+            Post not found
+          </Text>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={{
+              marginTop: 20,
+              paddingHorizontal: 20,
+              paddingVertical: 12,
+              backgroundColor: theme.colors.primary,
+              borderRadius: 8,
+            }}
+          >
+            <Text style={{ color: '#fff', fontWeight: '600' }}>Go Back</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
+      {/* Header with Back Button */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+        backgroundColor: theme.colors.surface,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.colors.border,
+      }}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{ marginRight: 12 }}
+        >
+          <Text style={{ color: theme.colors.primary, fontWeight: '700', fontSize: 16 }}>← Back</Text>
+        </TouchableOpacity>
+        <Text style={{ fontSize: 18, fontWeight: '600', color: theme.colors.text }}>Post</Text>
+      </View>
       <FlatList
         data={data}
         keyExtractor={(item) => `comment-${item._id}`}
@@ -484,7 +575,7 @@ const PostDetailScreen = () => {
             <View style={styles.postHeader}>
               <View style={styles.authorInfo}>
                 {post.author.avatar ? (
-                  <Image source={{ uri: post.author.avatar }} style={styles.avatar} />
+                  <Image source={{ uri: convertAvatarUrl(post.author.avatar) || '' }} style={styles.avatar} />
                 ) : (
                   <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
                     <Text style={styles.avatarText}>
@@ -514,7 +605,7 @@ const PostDetailScreen = () => {
           <View style={styles.commentContainer}>
             <View style={styles.commentHeader}>
               {item.author.avatar ? (
-                <Image source={{ uri: item.author.avatar }} style={styles.commentAvatar} />
+                <Image source={{ uri: convertAvatarUrl(item.author.avatar) || '' }} style={styles.commentAvatar} />
               ) : (
                 <View style={[styles.commentAvatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
                   <Text style={styles.commentAvatarText}>
@@ -557,7 +648,7 @@ const PostDetailScreen = () => {
           </View>
         )}
       />
-    </View>
+    </SafeAreaView>
   );
 };
 

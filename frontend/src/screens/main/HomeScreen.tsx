@@ -10,7 +10,10 @@ import {
   FlatList,
   Dimensions,
   TextInput,
+  Platform,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -21,6 +24,7 @@ import { RootStackParamList } from '../../types/navigation';
 import Toast from 'react-native-toast-message';
 import NotificationBell from '../../components/NotificationBell';
 import ReactionPopup from '../../components/ReactionPopup';
+import { convertAvatarUrl } from '../../utils/imageUtils';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -241,8 +245,9 @@ const HomeScreen: React.FC = () => {
       alignItems: 'center',
       flexShrink: 0,
       justifyContent: 'flex-end',
-      minWidth: 40,
+      minWidth: 80,
       marginLeft: theme.spacing.sm,
+      gap: theme.spacing.sm,
     },
     iconButton: {
       width: 40,
@@ -547,8 +552,10 @@ const HomeScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
       {/* Header */}
-      <View style={styles.header}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
+        <View style={styles.header}>
         <View style={styles.headerContent}>
           {/* Left: Avatar + Username */}
           <View style={styles.leftSection}>
@@ -558,10 +565,13 @@ const HomeScreen: React.FC = () => {
             >
               {user?.avatar ? (
                 <Image 
-                  source={{ uri: user.avatar }} 
+                  source={{ uri: convertAvatarUrl(user.avatar) || '' }} 
                   style={styles.avatarImage} 
                   resizeMode="cover"
-                  onError={() => console.log('Avatar image failed to load')}
+                  onError={(error) => {
+                    console.log('Avatar image failed to load:', error.nativeEvent.error);
+                    console.log('Avatar URL:', user.avatar);
+                  }}
                 />
               ) : (
                 <Text style={styles.avatarText}>
@@ -591,12 +601,19 @@ const HomeScreen: React.FC = () => {
             />
           </TouchableOpacity>
 
-          {/* Right: Notification Icon */}
+          {/* Right: Messaging and Notification Icons */}
           <View style={styles.rightSection}>
+            <TouchableOpacity 
+              style={styles.iconButton}
+              onPress={() => navigation.navigate('Messages' as never)}
+            >
+              <Text style={styles.iconText}>💬</Text>
+            </TouchableOpacity>
             <NotificationBell />
           </View>
         </View>
       </View>
+      </SafeAreaView>
 
       {/* Content */}
       <ScrollView
@@ -613,9 +630,17 @@ const HomeScreen: React.FC = () => {
             >
               <View style={styles.postHeader}>
                 <View style={styles.authorInfo}>
-                  <TouchableOpacity onPress={() => post.author?.username && navigation.navigate('UserProfile', { username: post.author.username })} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <TouchableOpacity 
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      if (post.author?.username) {
+                        navigation.navigate('UserProfile', { username: post.author.username });
+                      }
+                    }} 
+                    style={{ flexDirection: 'row', alignItems: 'center' }}
+                  >
                     {post.author?.avatar ? (
-                      <Image source={{ uri: post.author.avatar }} style={styles.avatar} />
+                      <Image source={{ uri: convertAvatarUrl(post.author.avatar) || '' }} style={styles.avatar} />
                     ) : (
                       <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
                         <Text style={styles.avatarText}>{post.author?.username?.charAt(0).toUpperCase() || '?'}</Text>

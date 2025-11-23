@@ -23,6 +23,9 @@ import PreferenceScreen from './src/screens/auth/PreferenceScreen';
 import AvatarSelectionScreen from './src/screens/auth/AvatarSelectionScreen';
 import MainNavigator from './src/navigation/MainNavigator';
 
+// Components
+import SignInAnimation from './src/components/SignInAnimation';
+
 // Utils
 import { initializeApp } from './src/utils/AppInitializer';
 import { forceWebScrolling } from './src/utils/forceWebScrolling';
@@ -34,6 +37,9 @@ const AppContent = () => {
   const { theme } = useTheme();
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasError, setHasError] = useState(false);
+  const [showSignInAnimation, setShowSignInAnimation] = useState(false);
+  const [previousUser, setPreviousUser] = useState<any>(null);
+  const [isFirstRender, setIsFirstRender] = useState(true);
 
   useEffect(() => {
     const initApp = async () => {
@@ -53,6 +59,23 @@ const AppContent = () => {
     
     return cleanup;
   }, []);
+
+  // Detect when user logs in (transitions from null to user)
+  useEffect(() => {
+    // Skip on first render to avoid showing animation on app load
+    if (isFirstRender) {
+      setIsFirstRender(false);
+      setPreviousUser(user);
+      return;
+    }
+    
+    // Only show animation if user just logged in (was null, now has user)
+    // and we're not in initial loading state
+    if (!isLoading && isInitialized && !previousUser && user) {
+      setShowSignInAnimation(true);
+    }
+    setPreviousUser(user);
+  }, [user, isLoading, isInitialized, isFirstRender]);
 
   if (hasError) {
     return (
@@ -115,6 +138,14 @@ const AppContent = () => {
           )}
         </Stack.Navigator>
       </NavigationContainer>
+      <SignInAnimation
+        visible={showSignInAnimation}
+        onComplete={() => {
+          setShowSignInAnimation(false);
+        }}
+        avatar={user?.avatar}
+        username={user?.username}
+      />
       <Toast />
     </View>
   );

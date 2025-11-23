@@ -7,7 +7,10 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
+  StatusBar,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
@@ -361,9 +364,11 @@ const WhisperWallScreen: React.FC = () => {
   ];
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <LinearGradient
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
+      <View style={styles.container}>
+        {/* Header */}
+        <LinearGradient
         colors={[theme.colors.surface, theme.colors.background]}
         style={styles.header}
       >
@@ -492,7 +497,8 @@ const WhisperWallScreen: React.FC = () => {
           </Animated.View>
         </View>
       </Modal>
-    </View>
+      </View>
+    </SafeAreaView>
   );
 };
 

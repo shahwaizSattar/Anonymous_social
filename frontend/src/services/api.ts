@@ -11,7 +11,7 @@ const getBaseURL = () => {
   if (!__DEV__) return 'https://your-production-url.com/api';
 
   // Development defaults per platform
-  const YOUR_COMPUTER_IP = '172.20.10.2'; // Update to your LAN IP for real device testing
+  const YOUR_COMPUTER_IP = '192.168.10.3'; // Update to your LAN IP for real device testing
 
   if (Platform.OS === 'web') {
     return `http://localhost:5000/api`;

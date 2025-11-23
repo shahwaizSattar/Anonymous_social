@@ -2,6 +2,7 @@ import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { View, Text, TouchableOpacity, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-native-reanimated';
 import { useTheme } from '../context/ThemeContext';
 import NotificationBell from '../components/NotificationBell';
@@ -123,7 +124,7 @@ const TabNavigator: React.FC = () => {
 
   return (
     <View style={[
-      { flex: 1 },
+      { flex: 1, backgroundColor: theme.colors.background },
       Platform.OS === 'web' ? ({ height: '100vh', display: 'flex', flexDirection: 'column' } as any) : null,
     ]}>
       <Tab.Navigator
@@ -183,15 +184,6 @@ const TabNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name="Messenger"
-        component={MessengerScreen}
-        options={{
-          tabBarIcon: ({ focused }) => (
-            <TabIcon name="Messages" focused={focused} icon="💬" />
-          ),
-        }}
-      />
-      <Tab.Screen
         name="Profile"
         component={ProfileScreen}
         options={{
@@ -239,7 +231,7 @@ const MainNavigator: React.FC = () => {
         name="PostDetail"
         component={PostDetailScreen}
         options={{
-          title: 'Post'
+          headerShown: false
         }}
       />
       <Stack.Screen
