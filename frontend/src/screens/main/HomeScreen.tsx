@@ -12,6 +12,8 @@ import {
   TextInput,
   Platform,
   StatusBar,
+  Animated,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
@@ -24,6 +26,7 @@ import { RootStackParamList } from '../../types/navigation';
 import Toast from 'react-native-toast-message';
 import NotificationBell from '../../components/NotificationBell';
 import ReactionPopup from '../../components/ReactionPopup';
+import PostOptions from '../../components/PostOptions';
 import { convertAvatarUrl } from '../../utils/imageUtils';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
@@ -47,6 +50,19 @@ const HomeScreen: React.FC = () => {
   });
   const buttonPositions = useRef<{ [key: string]: { x: number; y: number; width: number; height: number } }>({});
   const likeButtonRefs = useRef<{ [key: string]: any }>({});
+  const [postOptions, setPostOptions] = useState<{
+    visible: boolean;
+    postId: string;
+    authorId?: string;
+    authorUsername?: string;
+  }>({
+    visible: false,
+    postId: '',
+    authorId: undefined,
+    authorUsername: undefined,
+  });
+  const postCardRefs = useRef<{ [key: string]: Animated.Value }>({});
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
 
   const loadPosts = async () => {
     try {
@@ -420,37 +436,38 @@ const HomeScreen: React.FC = () => {
     actionButtons: {
       flexDirection: 'row',
       justifyContent: 'space-between',
-      paddingVertical: theme.spacing.sm,
+      paddingVertical: 4,
       borderTopWidth: 1,
       borderTopColor: theme.colors.border + '40',
-      marginTop: theme.spacing.md,
-      paddingTop: theme.spacing.md,
-      alignItems: 'stretch',
+      marginTop: theme.spacing.sm,
+      paddingTop: 4,
+      alignItems: 'center',
     },
     actionBtn: {
+      flexDirection: 'row',
       alignItems: 'center',
-      paddingHorizontal: theme.spacing.sm,
-      paddingVertical: theme.spacing.xs,
+      justifyContent: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 6,
       borderRadius: theme.borderRadius.md,
       flex: 1,
-      minHeight: 50,
-      justifyContent: 'center',
+      minHeight: 36,
     },
     activeActionBtn: {
-      backgroundColor: theme.colors.primary + '20',
+      backgroundColor: theme.colors.primary + '15',
     },
     actionBtnIcon: {
-      fontSize: 20,
-      marginBottom: theme.spacing.xs,
+      fontSize: 18,
+      marginRight: 6,
     },
     actionBtnText: {
       fontSize: 14,
       fontWeight: '600',
       color: theme.colors.text,
-      marginBottom: theme.spacing.xs,
+      marginRight: 4,
     },
     actionBtnCount: {
-      fontSize: 12,
+      fontSize: 13,
       fontWeight: '600',
       color: theme.colors.textSecondary,
     },
@@ -622,12 +639,58 @@ const HomeScreen: React.FC = () => {
       >
         {posts.length > 0 ? (
           posts.map(post => (
-            <TouchableOpacity 
-              key={post._id} 
-              style={styles.postCard}
-              onPress={() => navigation.navigate('PostDetail', { postId: post._id })}
-              activeOpacity={0.9}
-            >
+            (() => {
+              // Initialize animation value if not exists
+              if (!postCardRefs.current[post._id]) {
+                postCardRefs.current[post._id] = new Animated.Value(1);
+              }
+              const scaleAnim = postCardRefs.current[post._id];
+              
+              return (
+              <Animated.View
+                key={post._id}
+                style={[
+                  styles.postCard,
+                  {
+                    transform: [{ scale: scaleAnim }],
+                  },
+                ]}
+              >
+                <TouchableOpacity
+                  activeOpacity={1}
+                  onPress={() => {
+                    // Animation sequence: compress -> lift -> navigate
+                    Animated.parallel([
+                      // Compress post (8% shrink) then expand
+                      Animated.sequence([
+                        Animated.timing(scaleAnim, {
+                          toValue: 0.92,
+                          duration: 100,
+                          useNativeDriver: true,
+                        }),
+                        Animated.timing(scaleAnim, {
+                          toValue: 1.05,
+                          duration: 300,
+                          useNativeDriver: true,
+                        }),
+                      ]),
+                      // Darken background
+                      Animated.timing(overlayOpacity, {
+                        toValue: 1,
+                        duration: 300,
+                        useNativeDriver: true,
+                      }),
+                    ]).start(() => {
+                      // Navigate after animation
+                      navigation.navigate('PostDetail', { postId: post._id });
+                      // Reset after navigation
+                      setTimeout(() => {
+                        scaleAnim.setValue(1);
+                        overlayOpacity.setValue(0);
+                      }, 100);
+                    });
+                  }}
+                >
               <View style={styles.postHeader}>
                 <View style={styles.authorInfo}>
                   <TouchableOpacity 
@@ -649,7 +712,55 @@ const HomeScreen: React.FC = () => {
                     <Text style={[styles.username, { color: theme.colors.text }]}>{post.author?.username || 'Unknown User'}</Text>
                   </TouchableOpacity>
                 </View>
-                <Text style={[styles.postDate, { color: theme.colors.textSecondary }]}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                  <Text style={[styles.postDate, { color: theme.colors.textSecondary, marginRight: 12 }]}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+                  <TouchableOpacity
+                    onPress={(e) => {
+                      e.stopPropagation();
+                      setPostOptions({
+                        visible: true,
+                        postId: post._id,
+                        authorId: post.author?._id,
+                        authorUsername: post.author?.username,
+                      });
+                    }}
+                    style={{
+                      padding: 10,
+                      borderRadius: 20,
+                      backgroundColor: theme.colors.background,
+                      borderWidth: 1,
+                      borderColor: theme.colors.border,
+                      minWidth: 40,
+                      minHeight: 40,
+                      justifyContent: 'center',
+                      alignItems: 'center',
+                    }}
+                    activeOpacity={0.6}
+                  >
+                    <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                      <View style={{ 
+                        width: 4, 
+                        height: 4, 
+                        borderRadius: 2, 
+                        backgroundColor: theme.colors.text,
+                        marginBottom: 3,
+                      }} />
+                      <View style={{ 
+                        width: 4, 
+                        height: 4, 
+                        borderRadius: 2, 
+                        backgroundColor: theme.colors.text,
+                        marginBottom: 3,
+                      }} />
+                      <View style={{ 
+                        width: 4, 
+                        height: 4, 
+                        borderRadius: 2, 
+                        backgroundColor: theme.colors.text,
+                      }} />
+                    </View>
+                  </TouchableOpacity>
+                </View>
               </View>
               <View style={styles.postTags}>
                 {post.category && <Text style={[styles.postCategory, { color: theme.colors.primary }]}>#{post.category}</Text>}
@@ -700,7 +811,9 @@ const HomeScreen: React.FC = () => {
                     <Text style={styles.actionBtnText}>
                       {post.userReaction ? 'Liked' : 'Like'}
                     </Text>
-                    <Text style={styles.actionBtnCount}>{post.reactionCounts?.total || 0}</Text>
+                    {(post.reactionCounts?.total || 0) > 0 && (
+                      <Text style={styles.actionBtnCount}>{post.reactionCounts?.total || 0}</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
                 
@@ -714,7 +827,9 @@ const HomeScreen: React.FC = () => {
                   >
                     <Text style={styles.actionBtnIcon}>💬</Text>
                     <Text style={styles.actionBtnText}>Comment</Text>
-                    <Text style={styles.actionBtnCount}>{post.comments?.length || 0}</Text>
+                    {(post.comments?.length || 0) > 0 && (
+                      <Text style={styles.actionBtnCount}>{post.comments?.length || 0}</Text>
+                    )}
                   </TouchableOpacity>
                 </View>
               </View>
@@ -724,7 +839,10 @@ const HomeScreen: React.FC = () => {
                   {post.reactionCounts?.total || 0} likes • {post.comments?.length || 0} comments
                 </Text>
               </View>
-            </TouchableOpacity>
+                </TouchableOpacity>
+              </Animated.View>
+              );
+            })()
           ))
         ) : loading ? (
           <View style={styles.placeholderContainer}>
@@ -742,11 +860,44 @@ const HomeScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
+      
+      {/* Transition Overlay - Darkens background during animation */}
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          StyleSheet.absoluteFill,
+          {
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            opacity: overlayOpacity,
+            zIndex: 1000,
+          },
+        ]}
+      />
+      
       <ReactionPopup
         visible={reactionPopup.visible}
         position={reactionPopup.position}
         onSelect={handleReactionSelect}
         onClose={hideReactionPopup}
+      />
+      <PostOptions
+        visible={postOptions.visible}
+        onClose={() => setPostOptions({ visible: false, postId: '', authorId: undefined, authorUsername: undefined })}
+        postId={postOptions.postId}
+        authorId={postOptions.authorId}
+        authorUsername={postOptions.authorUsername}
+        onPostHidden={() => {
+          setPosts(posts.filter(p => p._id !== postOptions.postId));
+          setPostOptions({ visible: false, postId: '', authorId: undefined, authorUsername: undefined });
+        }}
+        onUserBlocked={() => {
+          setPosts(posts.filter(p => p.author?._id !== postOptions.authorId));
+          setPostOptions({ visible: false, postId: '', authorId: undefined, authorUsername: undefined });
+        }}
+        onUserMuted={() => {
+          setPosts(posts.filter(p => p.author?._id !== postOptions.authorId));
+          setPostOptions({ visible: false, postId: '', authorId: undefined, authorUsername: undefined });
+        }}
       />
     </View>
   );

@@ -19,7 +19,9 @@ import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { postsAPI } from '../../services/api';
 import LogoutAnimation from '../../components/LogoutAnimation';
+import UserPostOptions from '../../components/UserPostOptions';
 import { convertAvatarUrl } from '../../utils/imageUtils';
+import Toast from 'react-native-toast-message';
 // import { VideoView } from 'expo-video';
 
 const ProfileScreen: React.FC = () => {
@@ -30,6 +32,13 @@ const ProfileScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showLogoutAnimation, setShowLogoutAnimation] = useState(false);
+  const [postOptions, setPostOptions] = useState<{
+    visible: boolean;
+    postId: string;
+  }>({
+    visible: false,
+    postId: '',
+  });
 
   const loadUserPosts = async () => {
     if (!user?.username) {
@@ -376,11 +385,11 @@ const ProfileScreen: React.FC = () => {
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>{user?.stats?.followersCount || 0}</Text>
-          <Text style={styles.statLabel}>Echoes</Text>
+          <Text style={styles.statLabel}>Trackers</Text>
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>{user?.stats?.followingCount || 0}</Text>
-          <Text style={styles.statLabel}>Echoing</Text>
+          <Text style={styles.statLabel}>Tracking</Text>
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>{user?.stats?.karmaScore || 0}</Text>
@@ -415,7 +424,52 @@ const ProfileScreen: React.FC = () => {
         ) : userPosts.length > 0 ? (
           userPosts.map((post: any) => (
             <View key={post._id} style={styles.postCard}>
-              <Text style={styles.postCategory}>#{post.category}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm }}>
+                <Text style={styles.postCategory}>#{post.category}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setPostOptions({
+                      visible: true,
+                      postId: post._id,
+                    });
+                  }}
+                  style={{
+                    padding: 10,
+                    borderRadius: 20,
+                    backgroundColor: theme.colors.background,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                    minWidth: 40,
+                    minHeight: 40,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.6}
+                >
+                  <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ 
+                      width: 4, 
+                      height: 4, 
+                      borderRadius: 2, 
+                      backgroundColor: theme.colors.text,
+                      marginBottom: 3,
+                    }} />
+                    <View style={{ 
+                      width: 4, 
+                      height: 4, 
+                      borderRadius: 2, 
+                      backgroundColor: theme.colors.text,
+                      marginBottom: 3,
+                    }} />
+                    <View style={{ 
+                      width: 4, 
+                      height: 4, 
+                      borderRadius: 2, 
+                      backgroundColor: theme.colors.text,
+                    }} />
+                  </View>
+                </TouchableOpacity>
+              </View>
               {post.content.text && (
                 <Text style={styles.postText}>{post.content.text}</Text>
               )}
@@ -472,6 +526,37 @@ const ProfileScreen: React.FC = () => {
       }}
       avatar={user?.avatar}
       username={user?.username}
+    />
+    <UserPostOptions
+      visible={postOptions.visible}
+      onClose={() => setPostOptions({ visible: false, postId: '' })}
+      onEdit={() => {
+        // TODO: Navigate to edit post screen or show edit modal
+        Toast.show({
+          type: 'info',
+          text1: 'Edit Post',
+          text2: 'Edit functionality coming soon!',
+        });
+      }}
+      onDelete={async () => {
+        try {
+          await postsAPI.deletePost(postOptions.postId);
+          Toast.show({
+            type: 'success',
+            text1: 'Post Deleted',
+            text2: 'Your post has been deleted successfully.',
+          });
+          // Remove post from list
+          setUserPosts(userPosts.filter(p => p._id !== postOptions.postId));
+          setPostOptions({ visible: false, postId: '' });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to delete post. Please try again.',
+          });
+        }
+      }}
     />
     </SafeAreaView>
   );

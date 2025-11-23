@@ -203,6 +203,16 @@ export const userAPI = {
     );
     return response.data;
   },
+
+  muteUser: async (userId: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post(`/users/${userId}/mute`);
+    return response.data;
+  },
+
+  blockUser: async (userId: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post(`/users/${userId}/block`);
+    return response.data;
+  },
 };
 
 // Posts API
@@ -308,6 +318,18 @@ export const postsAPI = {
 
   deletePost: async (postId: string): Promise<ApiResponse> => {
     const response: AxiosResponse<ApiResponse> = await api.delete(`/posts/${postId}`);
+    return response.data;
+  },
+
+  reportPost: async (postId: string, reason: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post(`/posts/${postId}/report`, {
+      reason,
+    });
+    return response.data;
+  },
+
+  hidePost: async (postId: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post(`/posts/${postId}/hide`);
     return response.data;
   },
 };

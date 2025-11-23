@@ -1,28 +1,21 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { View, Text, TouchableOpacity } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
-import { chatAPI, userAPI } from '../services/api';
-import { useNavigation } from '@react-navigation/native';
+import { userAPI } from '../services/api';
+import NotificationDropdown from './NotificationDropdown';
 
 const NotificationBell: React.FC = () => {
   const { theme } = useTheme();
-  const navigation = useNavigation();
   const [count, setCount] = useState(0);
+  const [dropdownVisible, setDropdownVisible] = useState(false);
+  const [dropdownPosition, setDropdownPosition] = useState({ x: 0, y: 0 });
+  const buttonRef = useRef<TouchableOpacity>(null);
 
   const loadCounts = async () => {
     try {
-      const [convosRes, notifRes] = await Promise.all([
-        chatAPI.getConversations(),
-        userAPI.getNotifications().catch(() => ({ unreadCount: 0 })),
-      ]);
-      const convos = convosRes.conversations || [];
-      const unreadMessages = convos.reduce((sum: number, c: any) => {
-        const last = c.lastMessage;
-        const isUnread = last && String(last.sender) !== String((global as any).__authUserId) && !(last.readBy || []).includes((global as any).__authUserId);
-        return sum + (isUnread ? 1 : 0);
-      }, 0);
+      const notifRes = await userAPI.getNotifications().catch(() => ({ unreadCount: 0 }));
       const unreadNotifs = notifRes.unreadCount || 0;
-      setCount(unreadMessages + unreadNotifs);
+      setCount(unreadNotifs);
     } catch (e) {
       setCount(0);
     }
@@ -46,17 +39,43 @@ const NotificationBell: React.FC = () => {
     return () => clearTimeout(timer);
   }, []);
 
+  const handlePress = () => {
+    if (buttonRef.current) {
+      (buttonRef.current as any).measure((fx: number, fy: number, width: number, height: number, px: number, py: number) => {
+        setDropdownPosition({
+          x: px + width / 2,
+          y: py + height,
+        });
+        setDropdownVisible(true);
+      });
+    } else {
+      // Fallback position
+      setDropdownPosition({ x: 200, y: 60 });
+      setDropdownVisible(true);
+    }
+  };
+
   return (
-    <TouchableOpacity onPress={() => (navigation as any).navigate('Messages')}>
-      <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ fontSize: 18 }}>🔔</Text>
-        {count > 0 && (
-          <View style={{ position: 'absolute', top: -4, right: -6, backgroundColor: '#FF3B30', borderRadius: 10, paddingHorizontal: 6, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
-            <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{count}</Text>
-          </View>
-        )}
-      </View>
-    </TouchableOpacity>
+    <>
+      <TouchableOpacity
+        ref={buttonRef}
+        onPress={handlePress}
+      >
+        <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
+          <Text style={{ fontSize: 18 }}>🔔</Text>
+          {count > 0 && (
+            <View style={{ position: 'absolute', top: -4, right: -6, backgroundColor: '#FF3B30', borderRadius: 10, paddingHorizontal: 6, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+              <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{count > 99 ? '99+' : count}</Text>
+            </View>
+          )}
+        </View>
+      </TouchableOpacity>
+      <NotificationDropdown
+        visible={dropdownVisible}
+        onClose={() => setDropdownVisible(false)}
+        position={dropdownPosition}
+      />
+    </>
   );
 };
 

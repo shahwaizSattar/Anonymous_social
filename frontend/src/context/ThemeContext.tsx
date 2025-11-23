@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Theme types
@@ -373,13 +373,13 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     return currentTheme;
   };
 
-  const contextValue: ThemeContextType = {
+  const contextValue: ThemeContextType = useMemo(() => ({
     theme: getCurrentTheme(),
     themeName,
     setTheme,
     setMoodTheme,
     resetMoodTheme,
-  };
+  }), [themeName, moodOverride]);
 
   return (
     <ThemeContext.Provider value={contextValue}>
