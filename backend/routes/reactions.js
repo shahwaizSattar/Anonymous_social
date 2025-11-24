@@ -33,6 +33,9 @@ router.post('/:postId', authenticateToken, [
 
     await post.addReaction(userId, reactionType);
 
+    // Reload post to get latest reactionCounts
+    const updatedPost = await Post.findById(postId);
+
     // Award karma to post author (except self-reactions)
     if (!post.author.equals(userId)) {
       const karmaPoints = {
@@ -53,7 +56,7 @@ router.post('/:postId', authenticateToken, [
     res.json({
       success: true,
       message: 'Reaction added',
-      reactions: post.reactionCounts,
+      reactions: updatedPost.reactionCounts,
       userReaction: reactionType
     });
 
@@ -92,6 +95,9 @@ router.delete('/:postId', authenticateToken, async (req, res) => {
 
     await post.removeReaction(userId);
 
+    // Reload post to get latest reactionCounts
+    const updatedPost = await Post.findById(postId);
+
     // Subtract karma from post author
     if (currentReaction && !post.author.equals(userId)) {
       const karmaPoints = {
@@ -112,7 +118,7 @@ router.delete('/:postId', authenticateToken, async (req, res) => {
     res.json({
       success: true,
       message: 'Reaction removed',
-      reactions: post.reactionCounts,
+      reactions: updatedPost.reactionCounts,
       userReaction: null
     });
 
