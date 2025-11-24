@@ -143,21 +143,38 @@ const HomeScreen: React.FC = () => {
       const post = posts.find(p => p._id === postId);
       if (!post) return;
       
+      let response;
       if (post.userReaction === reactionType) {
-        await reactionsAPI.removeReaction(postId);
+        response = await reactionsAPI.removeReaction(postId);
         Toast.show({
           type: 'success',
           text1: 'Reaction removed',
         });
       } else {
-        await reactionsAPI.addReaction(postId, reactionType);
+        response = await reactionsAPI.addReaction(postId, reactionType);
         Toast.show({
           type: 'success',
           text1: 'Reaction added',
         });
       }
-      // Refresh the posts to get updated reaction counts
-      await loadPosts();
+      
+      // Update the post in state immediately with the response data
+      if (response.success && response.reactions) {
+        setPosts(prevPosts => 
+          prevPosts.map(p => 
+            p._id === postId 
+              ? { 
+                  ...p, 
+                  reactionCounts: response.reactions,
+                  userReaction: response.userReaction || null
+                }
+              : p
+          )
+        );
+      } else {
+        // Fallback: refresh posts if response doesn't have expected data
+        await loadPosts();
+      }
     } catch (error) {
       console.error('Error handling reaction:', error);
       Toast.show({
@@ -527,18 +544,18 @@ const HomeScreen: React.FC = () => {
           </View>
         ) : (
           // Multiple images - horizontal scroll
-          <FlatList
-            data={media}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(_, index) => index.toString()}
+        <FlatList
+          data={media}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyExtractor={(_, index) => index.toString()}
             contentContainerStyle={{ alignItems: 'center' }}
-            renderItem={({ item }) => {
-              console.log('🖼️ Rendering media item:', item); // Debug log
-              return (
-                <View style={styles.mediaItem}>
-                  {item.type === 'video' ? (
-                    <View style={styles.videoContainer}>
+          renderItem={({ item }) => {
+            console.log('🖼️ Rendering media item:', item); // Debug log
+            return (
+              <View style={styles.mediaItem}>
+                {item.type === 'video' ? (
+                  <View style={styles.videoContainer}>
                       <View style={[styles.mediaContent, { 
                         width: imageWidth * 0.9, 
                         height: imageHeight * 0.9,
@@ -546,22 +563,22 @@ const HomeScreen: React.FC = () => {
                         justifyContent: 'center', 
                         alignItems: 'center' 
                       }]}>
-                        <Text style={{ color: '#fff' }}>🎥 Video</Text>
-                      </View>
+                      <Text style={{ color: '#fff' }}>🎥 Video</Text>
                     </View>
-                  ) : (
-                    <Image 
-                      source={{ uri: item.url }} 
+                  </View>
+                ) : (
+                  <Image 
+                    source={{ uri: item.url }} 
                       style={[styles.mediaContent, { width: imageWidth * 0.9, height: imageHeight * 0.9 }]} 
-                      resizeMode="cover"
-                      onError={(error) => console.log('❌ Image load error:', error.nativeEvent.error, 'URL:', item.url)}
-                      onLoad={() => console.log('✅ Image loaded successfully:', item.url)}
-                    />
-                  )}
-                </View>
-              );
-            }}
-          />
+                    resizeMode="cover"
+                    onError={(error) => console.log('❌ Image load error:', error.nativeEvent.error, 'URL:', item.url)}
+                    onLoad={() => console.log('✅ Image loaded successfully:', item.url)}
+                  />
+                )}
+              </View>
+            );
+          }}
+        />
         )}
       </View>
     );
@@ -572,7 +589,7 @@ const HomeScreen: React.FC = () => {
       <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
       {/* Header */}
       <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
-        <View style={styles.header}>
+      <View style={styles.header}>
         <View style={styles.headerContent}>
           {/* Left: Avatar + Username */}
           <View style={styles.leftSection}>
@@ -580,7 +597,7 @@ const HomeScreen: React.FC = () => {
               onPress={() => user && navigation.navigate('Profile' as never)}
               style={styles.avatarContainer}
             >
-              {user?.avatar ? (
+            {user?.avatar ? (
                 <Image 
                   source={{ uri: convertAvatarUrl(user.avatar) || '' }} 
                   style={styles.avatarImage} 
@@ -590,17 +607,17 @@ const HomeScreen: React.FC = () => {
                     console.log('Avatar URL:', user.avatar);
                   }}
                 />
-              ) : (
+            ) : (
                 <Text style={styles.avatarText}>
                   {user?.username?.charAt(0).toUpperCase() || 'U'}
                 </Text>
-              )}
+            )}
             </TouchableOpacity>
             <Text style={styles.usernameText} numberOfLines={1}>
               {user?.username || 'User'}
             </Text>
           </View>
-
+          
           {/* Center: Search Bar */}
           <TouchableOpacity 
             style={styles.searchContainer}
@@ -621,7 +638,7 @@ const HomeScreen: React.FC = () => {
           {/* Right: Messaging and Notification Icons */}
           <View style={styles.rightSection}>
             <TouchableOpacity 
-              style={styles.iconButton}
+              style={styles.iconButton} 
               onPress={() => navigation.navigate('Messages' as never)}
             >
               <Text style={styles.iconText}>💬</Text>
@@ -797,40 +814,40 @@ const HomeScreen: React.FC = () => {
                   }}
                   style={{ flex: 1 }}
                 >
-                  <TouchableOpacity 
-                    style={[styles.actionBtn, post.userReaction && styles.activeActionBtn]}
+                <TouchableOpacity 
+                  style={[styles.actionBtn, post.userReaction && styles.activeActionBtn]}
                     onPress={(e) => {
                       e.stopPropagation();
                       // Show popup on press - measure button position
                       showReactionPopup(post._id, e);
                     }}
-                  >
-                    <Text style={styles.actionBtnIcon}>
-                      {post.userReaction ? '👍' : '👍'}
-                    </Text>
-                    <Text style={styles.actionBtnText}>
-                      {post.userReaction ? 'Liked' : 'Like'}
-                    </Text>
+                >
+                  <Text style={styles.actionBtnIcon}>
+                    {post.userReaction ? '👍' : '👍'}
+                  </Text>
+                  <Text style={styles.actionBtnText}>
+                    {post.userReaction ? 'Liked' : 'Like'}
+                  </Text>
                     {(post.reactionCounts?.total || 0) > 0 && (
-                      <Text style={styles.actionBtnCount}>{post.reactionCounts?.total || 0}</Text>
+                  <Text style={styles.actionBtnCount}>{post.reactionCounts?.total || 0}</Text>
                     )}
-                  </TouchableOpacity>
+                </TouchableOpacity>
                 </View>
                 
                 <View style={{ flex: 1 }}>
-                  <TouchableOpacity 
-                    style={styles.actionBtn}
+                <TouchableOpacity 
+                  style={styles.actionBtn}
                     onPress={(e) => {
                       e.stopPropagation();
                       navigation.navigate('PostDetail', { postId: post._id });
                     }}
-                  >
-                    <Text style={styles.actionBtnIcon}>💬</Text>
-                    <Text style={styles.actionBtnText}>Comment</Text>
+                >
+                  <Text style={styles.actionBtnIcon}>💬</Text>
+                  <Text style={styles.actionBtnText}>Comment</Text>
                     {(post.comments?.length || 0) > 0 && (
-                      <Text style={styles.actionBtnCount}>{post.comments?.length || 0}</Text>
+                  <Text style={styles.actionBtnCount}>{post.comments?.length || 0}</Text>
                     )}
-                  </TouchableOpacity>
+                </TouchableOpacity>
                 </View>
               </View>
               
@@ -839,7 +856,7 @@ const HomeScreen: React.FC = () => {
                   {post.reactionCounts?.total || 0} likes • {post.comments?.length || 0} comments
                 </Text>
               </View>
-                </TouchableOpacity>
+            </TouchableOpacity>
               </Animated.View>
               );
             })()

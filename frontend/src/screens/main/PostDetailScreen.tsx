@@ -396,20 +396,34 @@ const PostDetailScreen = () => {
     try {
       if (!post) return;
       
+      let response;
       if (post.userReaction === reactionType) {
-        await reactionsAPI.removeReaction(postId);
+        response = await reactionsAPI.removeReaction(postId);
         Toast.show({
           type: 'success',
           text1: 'Reaction removed',
         });
       } else {
-        await reactionsAPI.addReaction(postId, reactionType);
+        response = await reactionsAPI.addReaction(postId, reactionType);
         Toast.show({
           type: 'success',
           text1: 'Reaction added',
         });
       }
-      fetchPost();
+      
+      // Update the post in state immediately with the response data
+      if (response.success && response.reactions) {
+        setPost(prevPost => 
+          prevPost ? {
+            ...prevPost,
+            reactionCounts: response.reactions,
+            userReaction: response.userReaction || null
+          } : null
+        );
+      } else {
+        // Fallback: refresh post if response doesn't have expected data
+        fetchPost();
+      }
     } catch (error) {
       console.error('Error handling reaction:', error);
       Toast.show({
@@ -523,10 +537,10 @@ const PostDetailScreen = () => {
           </TouchableOpacity>
           <Text style={{ fontSize: 18, fontWeight: '600', color: theme.colors.text }}>Post</Text>
         </View>
-        <View style={styles.errorContainer}>
-          <Text style={[styles.errorText, { color: theme.colors.text }]}>
-            Post not found
-          </Text>
+      <View style={styles.errorContainer}>
+        <Text style={[styles.errorText, { color: theme.colors.text }]}>
+          Post not found
+        </Text>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
             style={{
@@ -539,7 +553,7 @@ const PostDetailScreen = () => {
           >
             <Text style={{ color: '#fff', fontWeight: '600' }}>Go Back</Text>
           </TouchableOpacity>
-        </View>
+      </View>
       </SafeAreaView>
     );
   }

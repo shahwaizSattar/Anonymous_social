@@ -5,6 +5,16 @@ interface ApiResponse<T = any> {
   success: boolean;
   message: string;
   data?: T;
+  reactions?: {
+    funny: number;
+    rage: number;
+    shock: number;
+    relatable: number;
+    love: number;
+    thinking: number;
+    total: number;
+  };
+  userReaction?: string | null;
 }
 
 interface PaginatedResponse<T> {
