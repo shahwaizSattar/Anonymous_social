@@ -8,12 +8,16 @@ import {
   FlatList,
   Image,
   ScrollView,
+  StatusBar,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { postsAPI, userAPI } from '../../services/api';
+import { convertAvatarUrl } from '../../utils/imageUtils';
 
 interface SearchHistory {
   id: string;
@@ -200,7 +204,7 @@ const SearchScreen: React.FC = () => {
     >
       <View style={styles.resultContent}>
         {item.avatar && (
-          <Image source={{ uri: item.avatar }} style={styles.resultAvatar} />
+          <Image source={{ uri: convertAvatarUrl(item.avatar) || '' }} style={styles.resultAvatar} />
         )}
         <View style={styles.resultText}>
           <Text style={styles.resultTitle}>{item.title}</Text>
@@ -389,6 +393,8 @@ const SearchScreen: React.FC = () => {
   });
 
   return (
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
     <View style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
@@ -469,6 +475,7 @@ const SearchScreen: React.FC = () => {
         )}
       </ScrollView>
     </View>
+    </SafeAreaView>
   );
 };
 

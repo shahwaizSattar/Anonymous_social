@@ -478,6 +478,71 @@ router.post('/:postId/comments', authenticateToken, [
   }
 });
 
+// PUT /api/posts/:postId - Edit post
+router.put('/:postId', authenticateToken, [
+  body('content.text').optional().isLength({ max: 2000 }),
+  body('content.media').optional().isArray(),
+  body('category').optional().isIn(['Gaming', 'Education', 'Beauty', 'Fitness', 'Music', 'Technology', 
+    'Art', 'Food', 'Travel', 'Sports', 'Movies', 'Books', 'Fashion',
+    'Photography', 'Comedy', 'Science', 'Politics', 'Business'])
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { postId } = req.params;
+    const userId = req.user._id;
+    const { content, category, tags } = req.body;
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found'
+      });
+    }
+
+    // Check if user owns the post
+    if (!post.author.equals(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only edit your own posts'
+      });
+    }
+
+    // Update post fields
+    if (content) {
+      if (content.text !== undefined) post.content.text = content.text;
+      if (content.media !== undefined) post.content.media = content.media;
+    }
+    
+    if (category) post.category = category;
+    if (tags) post.tags = tags;
+
+    await post.save();
+    await post.populate('author', 'username avatar');
+
+    res.json({
+      success: true,
+      message: 'Post updated successfully',
+      post
+    });
+
+  } catch (error) {
+    console.error('Edit post error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 // DELETE /api/posts/:postId - Delete post
 router.delete('/:postId', authenticateToken, async (req, res) => {
   try {

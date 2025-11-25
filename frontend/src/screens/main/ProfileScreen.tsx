@@ -9,12 +9,20 @@ import {
   FlatList,
   Dimensions,
   RefreshControl,
+  StatusBar,
+  Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { postsAPI } from '../../services/api';
+import LogoutAnimation from '../../components/LogoutAnimation';
+import UserPostOptions from '../../components/UserPostOptions';
+import EditPostModal from '../../components/EditPostModal';
+import { convertAvatarUrl } from '../../utils/imageUtils';
+import Toast from 'react-native-toast-message';
 // import { VideoView } from 'expo-video';
 
 const ProfileScreen: React.FC = () => {
@@ -24,6 +32,21 @@ const ProfileScreen: React.FC = () => {
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [showLogoutAnimation, setShowLogoutAnimation] = useState(false);
+  const [postOptions, setPostOptions] = useState<{
+    visible: boolean;
+    postId: string;
+  }>({
+    visible: false,
+    postId: '',
+  });
+  const [editPostModal, setEditPostModal] = useState<{
+    visible: boolean;
+    post: any | null;
+  }>({
+    visible: false,
+    post: null,
+  });
 
   const loadUserPosts = async () => {
     if (!user?.username) {
@@ -313,6 +336,7 @@ const ProfileScreen: React.FC = () => {
   };
 
   const menuItems = [
+    { icon: '✏️', title: 'Edit Profile', onPress: () => navigation.navigate('EditProfile' as never) },
     { icon: '💬', title: 'Messages', onPress: () => navigation.navigate('Messages' as never) },
     { icon: '⚙️', title: 'Settings', onPress: () => navigation.navigate('Settings' as never) },
     { icon: '🔔', title: 'Notifications', onPress: () => navigation.navigate('Notifications' as never) },
@@ -323,6 +347,8 @@ const ProfileScreen: React.FC = () => {
   ];
 
   return (
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
     <ScrollView 
       style={styles.container}
       refreshControl={
@@ -336,7 +362,7 @@ const ProfileScreen: React.FC = () => {
         {/* Avatar */}
         <View style={styles.avatarContainer}>
           {user?.avatar ? (
-            <Image source={{ uri: user.avatar }} style={{ width: 100, height: 100, borderRadius: 50 }} />
+            <Image source={{ uri: convertAvatarUrl(user.avatar) || '' }} style={{ width: 100, height: 100, borderRadius: 50 }} />
           ) : (
             <Text style={styles.avatarText}>
               {user?.username?.charAt(0).toUpperCase() || '?'}
@@ -368,11 +394,11 @@ const ProfileScreen: React.FC = () => {
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>{user?.stats?.followersCount || 0}</Text>
-          <Text style={styles.statLabel}>Echoes</Text>
+          <Text style={styles.statLabel}>Trackers</Text>
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>{user?.stats?.followingCount || 0}</Text>
-          <Text style={styles.statLabel}>Echoing</Text>
+          <Text style={styles.statLabel}>Tracking</Text>
         </View>
         <View style={styles.statItem}>
           <Text style={styles.statNumber}>{user?.stats?.karmaScore || 0}</Text>
@@ -407,7 +433,52 @@ const ProfileScreen: React.FC = () => {
         ) : userPosts.length > 0 ? (
           userPosts.map((post: any) => (
             <View key={post._id} style={styles.postCard}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm }}>
               <Text style={styles.postCategory}>#{post.category}</Text>
+                <TouchableOpacity
+                  onPress={() => {
+                    setPostOptions({
+                      visible: true,
+                      postId: post._id,
+                    });
+                  }}
+                  style={{
+                    padding: 10,
+                    borderRadius: 20,
+                    backgroundColor: theme.colors.background,
+                    borderWidth: 1,
+                    borderColor: theme.colors.border,
+                    minWidth: 40,
+                    minHeight: 40,
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                  }}
+                  activeOpacity={0.6}
+                >
+                  <View style={{ flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={{ 
+                      width: 4, 
+                      height: 4, 
+                      borderRadius: 2, 
+                      backgroundColor: theme.colors.text,
+                      marginBottom: 3,
+                    }} />
+                    <View style={{ 
+                      width: 4, 
+                      height: 4, 
+                      borderRadius: 2, 
+                      backgroundColor: theme.colors.text,
+                      marginBottom: 3,
+                    }} />
+                    <View style={{ 
+                      width: 4, 
+                      height: 4, 
+                      borderRadius: 2, 
+                      backgroundColor: theme.colors.text,
+                    }} />
+                  </View>
+                </TouchableOpacity>
+              </View>
               {post.content.text && (
                 <Text style={styles.postText}>{post.content.text}</Text>
               )}
@@ -449,13 +520,63 @@ const ProfileScreen: React.FC = () => {
         {/* Logout Button */}
         <TouchableOpacity
           style={[styles.menuItem, styles.logoutButton]}
-          onPress={logout}
+          onPress={() => setShowLogoutAnimation(true)}
         >
           <Text style={[styles.menuIcon, styles.logoutText]}>🚪</Text>
           <Text style={[styles.menuText, styles.logoutText]}>Logout</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>
+    <LogoutAnimation
+      visible={showLogoutAnimation}
+      onComplete={async () => {
+        setShowLogoutAnimation(false);
+        await logout();
+      }}
+      avatar={user?.avatar}
+      username={user?.username}
+    />
+    <UserPostOptions
+      visible={postOptions.visible}
+      onClose={() => setPostOptions({ visible: false, postId: '' })}
+      onEdit={() => {
+        const post = userPosts.find(p => p._id === postOptions.postId);
+        if (post) {
+          setEditPostModal({
+            visible: true,
+            post,
+          });
+        }
+      }}
+      onDelete={async () => {
+        try {
+          await postsAPI.deletePost(postOptions.postId);
+          Toast.show({
+            type: 'success',
+            text1: 'Post Deleted',
+            text2: 'Your post has been deleted successfully.',
+          });
+          setUserPosts(userPosts.filter(p => p._id !== postOptions.postId));
+          setPostOptions({ visible: false, postId: '' });
+        } catch (error) {
+          Toast.show({
+            type: 'error',
+            text1: 'Error',
+            text2: 'Failed to delete post. Please try again.',
+          });
+        }
+      }}
+    />
+    <EditPostModal
+      visible={editPostModal.visible}
+      post={editPostModal.post}
+      onClose={() => setEditPostModal({ visible: false, post: null })}
+      onSuccess={() => {
+        loadUserPosts();
+        setPostOptions({ visible: false, postId: '' });
+      }}
+    />
+    </SafeAreaView>
   );
 };
 

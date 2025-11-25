@@ -81,7 +81,8 @@ const AvatarSelectionScreen: React.FC = () => {
 
     seeds.forEach((seed, index) => {
       const style = avatarStyles[index % avatarStyles.length];
-      const url = `https://api.dicebear.com/7.x/${style}/svg?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9&size=150`;
+      // Use PNG format instead of SVG for React Native compatibility
+      const url = `https://api.dicebear.com/7.x/${style}/png?seed=${seed}&backgroundColor=b6e3f4,c0aede,d1d4f9&size=150`;
       
       options.push({
         id: `${style}_${seed}`,

@@ -10,11 +10,14 @@ import {
   ScrollView,
   Alert,
   Modal,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
 import { chatAPI, userAPI } from '../../services/api';
+import { convertAvatarUrl } from '../../utils/imageUtils';
 
 interface Chat {
   _id: string;
@@ -654,14 +657,16 @@ const MessengerScreen: React.FC = () => {
     
     return (
       <View style={styles.container}>
-        {/* Chat Header */}
-        <View style={styles.chatHeader}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => setSelectedChat(null)}
-          >
-            <Text style={styles.backButtonText}>←</Text>
-          </TouchableOpacity>
+        <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
+          <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
+          {/* Chat Header */}
+          <View style={styles.chatHeader}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => setSelectedChat(null)}
+            >
+              <Text style={styles.backButtonText}>←</Text>
+            </TouchableOpacity>
           <View style={styles.chatUserInfo}>
             {otherUser?.avatar ? (
               <Image
@@ -677,7 +682,8 @@ const MessengerScreen: React.FC = () => {
             )}
             <Text style={styles.chatUserName}>{otherUser?.username || 'Unknown'}</Text>
           </View>
-        </View>
+          </View>
+        </SafeAreaView>
 
         {/* Messages */}
         <FlatList
@@ -709,8 +715,10 @@ const MessengerScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
+        <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
+        {/* Header */}
+        <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -724,7 +732,8 @@ const MessengerScreen: React.FC = () => {
         >
           <Text style={styles.searchButtonText}>🔍</Text>
         </TouchableOpacity>
-      </View>
+        </View>
+      </SafeAreaView>
 
       {/* Chat List */}
       {loading ? (

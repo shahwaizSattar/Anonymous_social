@@ -31,6 +31,7 @@ const LoginScreen: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [emailError, setEmailError] = useState('');
   const [passwordError, setPasswordError] = useState('');
+  const [generalError, setGeneralError] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const formScale = useSharedValue(0.9);
@@ -71,6 +72,7 @@ const LoginScreen: React.FC = () => {
   };
 
   const handleLogin = async () => {
+    setGeneralError('');
     const isEmailValid = validateEmail(email);
     const isPasswordValid = validatePassword(password);
 
@@ -80,45 +82,26 @@ const LoginScreen: React.FC = () => {
 
     try {
       setIsProcessing(true);
-      
-      // Show loading toast
-      Toast.show({
-        type: 'info',
-        text1: 'Signing In...',
-        text2: 'Please wait while we authenticate you',
-        visibilityTime: 2000,
-      });
 
       const result = await login(email.toLowerCase().trim(), password);
       if (result.success) {
-        // Show success message before navigation
         Toast.show({
           type: 'success',
           text1: 'Welcome back!',
           text2: result.message,
           visibilityTime: 3000,
         });
-        
-        // Small delay to let user see the success message
         setTimeout(() => {
-          // Navigation will be handled by AuthContext automatically
           setIsProcessing(false);
         }, 1500);
       } else {
         setIsProcessing(false);
-        Toast.show({
-          type: 'error',
-          text1: 'Login Failed',
-          text2: result.message,
-        });
+        setGeneralError(result.message || 'Login failed. Please check your credentials.');
       }
-    } catch (error) {
+    } catch (error: any) {
       setIsProcessing(false);
-      Toast.show({
-        type: 'error',
-        text1: 'Error',
-        text2: 'Something went wrong. Please try again.',
-      });
+      const errorMessage = error.response?.data?.message || 'Something went wrong. Please try again.';
+      setGeneralError(errorMessage);
     }
   };
 
@@ -193,6 +176,19 @@ const LoginScreen: React.FC = () => {
       fontSize: 12,
       color: theme.colors.error,
       marginTop: theme.spacing.xs,
+    },
+    generalErrorContainer: {
+      backgroundColor: theme.colors.error + '20',
+      borderWidth: 1,
+      borderColor: theme.colors.error,
+      borderRadius: theme.borderRadius.md,
+      padding: theme.spacing.md,
+      marginBottom: theme.spacing.lg,
+    },
+    generalErrorText: {
+      fontSize: 14,
+      color: theme.colors.error,
+      fontWeight: '500',
     },
     loginButton: {
       backgroundColor: theme.colors.primary,
@@ -278,6 +274,13 @@ const LoginScreen: React.FC = () => {
 
             {/* Login Form */}
             <View style={styles.form}>
+              {/* General Error Message */}
+              {generalError ? (
+                <View style={styles.generalErrorContainer}>
+                  <Text style={styles.generalErrorText}>{generalError}</Text>
+                </View>
+              ) : null}
+
               {/* Email Input */}
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Email or Username</Text>
@@ -350,7 +353,10 @@ const LoginScreen: React.FC = () => {
               </TouchableOpacity>
 
               {/* Forgot Password */}
-              <TouchableOpacity style={styles.forgotPassword}>
+              <TouchableOpacity 
+                style={styles.forgotPassword}
+                onPress={() => navigation.navigate('ForgotPassword' as never)}
+              >
                 <Text style={styles.forgotPasswordText}>
                   Forgot your password?
                 </Text>

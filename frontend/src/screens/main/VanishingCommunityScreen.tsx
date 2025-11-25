@@ -18,6 +18,7 @@ import { useAuth } from '../../context/AuthContext';
 import { whisperWallAPI, mediaAPI } from '../../services/api';
 import Toast from 'react-native-toast-message';
 import * as ImagePicker from 'expo-image-picker';
+import { censorText } from '../../utils/censorUtils';
 
 interface WhisperPost {
   _id: string;
@@ -395,7 +396,7 @@ const VanishingCommunityScreen: React.FC = () => {
         </View>
       )}
       
-      {item.content.text && <Text style={styles.postContent}>{item.content.text}</Text>}
+      {item.content.text && <Text style={styles.postContent}>{censorText(item.content.text)}</Text>}
       {renderMedia(item.content.media || [])}
       
       <View style={styles.reactionsContainer}>
@@ -434,7 +435,7 @@ const VanishingCommunityScreen: React.FC = () => {
           {item.comments.map(comment => (
             <View key={comment._id} style={styles.comment}>
               <Text style={styles.commentAuthor}>👻 {comment.randomUsername}</Text>
-              <Text style={styles.commentContent}>{comment.content}</Text>
+              <Text style={styles.commentContent}>{censorText(comment.content)}</Text>
             </View>
           ))}
         </View>

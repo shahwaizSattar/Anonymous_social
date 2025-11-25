@@ -144,50 +144,48 @@ postSchema.methods.calculateTrendingScore = function() {
   return this.save();
 };
 
-// Add reaction
 postSchema.methods.addReaction = async function(userId, reactionType) {
-  // Remove existing reactions from this user
   Object.keys(this.reactions).forEach(type => {
     this.reactions[type] = this.reactions[type].filter(r => !r.user.equals(userId));
   });
   
-  // Add new reaction
   this.reactions[reactionType].push({
     user: userId,
     timestamp: new Date()
   });
   
-  // Update counts
-  this.reactionCounts = {
-    funny: this.reactions.funny.length,
-    rage: this.reactions.rage.length,
-    shock: this.reactions.shock.length,
-    relatable: this.reactions.relatable.length,
-    love: this.reactions.love.length,
-    thinking: this.reactions.thinking.length
-  };
-  this.reactionCounts.total = Object.values(this.reactionCounts).reduce((a, b) => a + b, 0);
+  this.reactionCounts.funny = this.reactions.funny.length;
+  this.reactionCounts.rage = this.reactions.rage.length;
+  this.reactionCounts.shock = this.reactions.shock.length;
+  this.reactionCounts.relatable = this.reactions.relatable.length;
+  this.reactionCounts.love = this.reactions.love.length;
+  this.reactionCounts.thinking = this.reactions.thinking.length;
+  this.reactionCounts.total = this.reactions.funny.length + this.reactions.rage.length + 
+                               this.reactions.shock.length + this.reactions.relatable.length + 
+                               this.reactions.love.length + this.reactions.thinking.length;
+  
+  this.markModified('reactionCounts');
   
   await this.calculateTrendingScore();
   return this.save();
 };
 
-// Remove reaction
 postSchema.methods.removeReaction = async function(userId) {
   Object.keys(this.reactions).forEach(type => {
     this.reactions[type] = this.reactions[type].filter(r => !r.user.equals(userId));
   });
   
-  // Update counts
-  this.reactionCounts = {
-    funny: this.reactions.funny.length,
-    rage: this.reactions.rage.length,
-    shock: this.reactions.shock.length,
-    relatable: this.reactions.relatable.length,
-    love: this.reactions.love.length,
-    thinking: this.reactions.thinking.length
-  };
-  this.reactionCounts.total = Object.values(this.reactionCounts).reduce((a, b) => a + b, 0);
+  this.reactionCounts.funny = this.reactions.funny.length;
+  this.reactionCounts.rage = this.reactions.rage.length;
+  this.reactionCounts.shock = this.reactions.shock.length;
+  this.reactionCounts.relatable = this.reactions.relatable.length;
+  this.reactionCounts.love = this.reactions.love.length;
+  this.reactionCounts.thinking = this.reactions.thinking.length;
+  this.reactionCounts.total = this.reactions.funny.length + this.reactions.rage.length + 
+                               this.reactions.shock.length + this.reactions.relatable.length + 
+                               this.reactions.love.length + this.reactions.thinking.length;
+  
+  this.markModified('reactionCounts');
   
   await this.calculateTrendingScore();
   return this.save();

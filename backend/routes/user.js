@@ -322,11 +322,107 @@ router.get('/list', async (req, res) => {
   }
 });
 
+// PUT /api/user/change-password - Change password
+router.put('/change-password', authenticateToken, [
+  body('currentPassword').notEmpty().withMessage('Current password is required'),
+  body('newPassword').isLength({ min: 6 }).withMessage('New password must be at least 6 characters')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { currentPassword, newPassword } = req.body;
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    const passwordMatch = await user.comparePassword(currentPassword);
+    if (!passwordMatch) {
+      return res.status(401).json({
+        success: false,
+        message: 'Current password is incorrect'
+      });
+    }
+
+    user.password = newPassword;
+    await user.save();
+
+    res.json({
+      success: true,
+      message: 'Password changed successfully'
+    });
+
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// PUT /api/user/change-username - Change username
+router.put('/change-username', authenticateToken, [
+  body('newUsername').isLength({ min: 3, max: 30 }).withMessage('Username must be 3-30 characters'),
+  body('newUsername').matches(/^[a-zA-Z0-9_-]+$/).withMessage('Username can only contain letters, numbers, underscores, and hyphens')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { newUsername } = req.body;
+    const userId = req.user._id;
+
+    const existingUser = await User.findOne({ username: newUsername });
+    if (existingUser && existingUser._id.toString() !== userId.toString()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Username already taken'
+      });
+    }
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { username: newUsername },
+      { new: true, runValidators: true }
+    ).select('-password');
+
+    res.json({
+      success: true,
+      message: 'Username changed successfully',
+      user
+    });
+
+  } catch (error) {
+    console.error('Change username error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
 // GET /api/user/notifications - Get user notifications
 router.get('/notifications', authenticateToken, async (req, res) => {
   try {
-    // This would typically come from a separate Notification model
-    // For now, return a mock structure
     const notifications = [
       {
         id: '1',

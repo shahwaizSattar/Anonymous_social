@@ -1,5 +1,6 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
-console.log("✅ Loaded MONGODB_URI:", process.env.MONGODB_URI);
+// Load .env from root directory (one level up from backend)
+require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
+console.log("✅ Loaded MONGODB_URI:", process.env.MONGODB_URI ? 'Found' : 'Not found');
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -78,7 +79,17 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 const connectDB = async () => {
   try {
     // Use Atlas URI from environment or fallback
-    const mongoURI = process.env.MONGODB_URI || 'mongodb+srv://blog-app:blog-app@blog-app.zi3j2.mongodb.net/whisper-echo?retryWrites=true&w=majority';
+    let mongoURI = process.env.MONGODB_URI || 'mongodb+srv://blog-app:blog-app@blog-app.zi3j2.mongodb.net/whisper-echo?retryWrites=true&w=majority';
+    
+    // If URI doesn't have a database name, add it
+    if (mongoURI && !mongoURI.includes('/whisper-echo') && !mongoURI.match(/\/[^/?]+(\?|$)/)) {
+      // Insert database name before the query string or at the end
+      if (mongoURI.includes('?')) {
+        mongoURI = mongoURI.replace('?', '/whisper-echo?');
+      } else {
+        mongoURI = mongoURI + '/whisper-echo';
+      }
+    }
     
     console.log('🔌 Connecting to MongoDB Atlas...');
     

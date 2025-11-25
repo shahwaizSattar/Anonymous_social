@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, Image, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { chatAPI } from '../../services/api';
+import { convertAvatarUrl } from '../../utils/imageUtils';
 
 type ChatRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 
@@ -134,12 +136,14 @@ const ChatScreen: React.FC = () => {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
+        <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
       <View style={styles.header}>
         <TouchableOpacity onPress={() => { chatAPI.markRead(peerId).finally(() => (navigation as any).goBack()); }} style={{ marginRight: 12 }}>
           <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Back</Text>
         </TouchableOpacity>
         {avatar ? (
-          <Image source={{ uri: avatar }} style={styles.headerAvatar} />
+            <Image source={{ uri: convertAvatarUrl(avatar) || '' }} style={styles.headerAvatar} />
         ) : (
           <View style={[styles.headerAvatar, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}> 
             <Text style={{ color: theme.colors.textInverse, fontWeight: '700' }}>{username.charAt(0).toUpperCase()}</Text>
@@ -147,6 +151,7 @@ const ChatScreen: React.FC = () => {
         )}
         <Text style={styles.headerName}>@{username}</Text>
       </View>
+      </SafeAreaView>
       <FlatList
         ref={listRef}
         style={styles.list}

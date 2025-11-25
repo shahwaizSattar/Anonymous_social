@@ -33,7 +33,15 @@ router.post('/:postId', authenticateToken, [
 
     await post.addReaction(userId, reactionType);
 
-    // Award karma to post author (except self-reactions)
+    const updatedPost = await Post.findById(postId);
+
+    if (!updatedPost) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found after update'
+      });
+    }
+
     if (!post.author.equals(userId)) {
       const karmaPoints = {
         'funny': 2,
@@ -50,10 +58,12 @@ router.post('/:postId', authenticateToken, [
       }
     }
 
+    console.log('Updated post reactions:', updatedPost.reactionCounts);
+    
     res.json({
       success: true,
       message: 'Reaction added',
-      reactions: post.reactionCounts,
+      reactions: updatedPost.reactionCounts,
       userReaction: reactionType
     });
 
@@ -92,7 +102,15 @@ router.delete('/:postId', authenticateToken, async (req, res) => {
 
     await post.removeReaction(userId);
 
-    // Subtract karma from post author
+    const updatedPost = await Post.findById(postId);
+
+    if (!updatedPost) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found after update'
+      });
+    }
+
     if (currentReaction && !post.author.equals(userId)) {
       const karmaPoints = {
         'funny': 2,
@@ -109,10 +127,12 @@ router.delete('/:postId', authenticateToken, async (req, res) => {
       }
     }
 
+    console.log('Updated post reactions after removal:', updatedPost.reactionCounts);
+
     res.json({
       success: true,
       message: 'Reaction removed',
-      reactions: post.reactionCounts,
+      reactions: updatedPost.reactionCounts,
       userReaction: null
     });
 
@@ -378,3 +398,4 @@ router.get('/trending', async (req, res) => {
 });
 
 module.exports = router;
+

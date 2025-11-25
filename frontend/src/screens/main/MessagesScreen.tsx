@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, Image, StatusBar } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { chatAPI } from '../../services/api';
 import Toast from 'react-native-toast-message';
 import { navigate } from '../../navigation/navigationRef';
 import { useAuth } from '../../context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
+import { convertAvatarUrl } from '../../utils/imageUtils';
 
 const MessagesScreen: React.FC = () => {
   const { theme } = useTheme();
@@ -90,7 +92,7 @@ const MessagesScreen: React.FC = () => {
       onPress={() => (navigation as any).navigate('Chat', { peerId: item.other?._id, username: item.other?.username, avatar: item.other?.avatar })}
     >
       {item.other?.avatar ? (
-        <Image source={{ uri: item.other.avatar }} style={styles.avatar} />
+        <Image source={{ uri: convertAvatarUrl(item.other.avatar) || '' }} style={styles.avatar} />
       ) : (
         <View style={[styles.avatar, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}> 
           <Text style={{ color: theme.colors.textInverse, fontWeight: '700' }}>{item.other?.username?.charAt(0)?.toUpperCase() || '?'}</Text>
@@ -105,13 +107,16 @@ const MessagesScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => (navigation as any).goBack()}>
-          <Text style={styles.back}>Back</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Messages</Text>
-        <View style={{ width: 50 }} />
-      </View>
+      <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
+        <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => (navigation as any).goBack()}>
+            <Text style={styles.back}>Back</Text>
+          </TouchableOpacity>
+          <Text style={styles.title}>Messages</Text>
+          <View style={{ width: 50 }} />
+        </View>
+      </SafeAreaView>
       <FlatList
         data={items}
         keyExtractor={(i) => i._id}

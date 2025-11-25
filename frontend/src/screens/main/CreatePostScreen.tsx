@@ -10,7 +10,9 @@ import {
   Image,
   FlatList,
   Platform,
+  StatusBar,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { postsAPI, mediaAPI } from '../../services/api';
@@ -227,6 +229,8 @@ const CreatePostScreen: React.FC = () => {
   };
 
   return (
+    <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
     <View style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
@@ -297,6 +301,7 @@ const CreatePostScreen: React.FC = () => {
         </View>
       </ScrollView>
     </View>
+    </SafeAreaView>
   );
 };
 

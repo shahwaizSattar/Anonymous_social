@@ -11,6 +11,7 @@ import {
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
+import { convertAvatarUrl } from '../../utils/imageUtils';
 
 interface Notification {
   id: string;
@@ -204,7 +205,7 @@ const NotificationsScreen: React.FC = () => {
           </Text>
         </View>
         {item.user.avatar && (
-          <Image source={{ uri: item.user.avatar }} style={styles.userAvatar} />
+          <Image source={{ uri: convertAvatarUrl(item.user.avatar) || '' }} style={styles.userAvatar} />
         )}
       </View>
     </TouchableOpacity>

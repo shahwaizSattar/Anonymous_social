@@ -80,7 +80,7 @@ frontend/src/
 │   ├── auth/           # Authentication screens
 │   └── main/           # Main app screens
 ├── services/           # API services
-│   └── api.ts          # HTTP client configuration
+│   └──           # HTTP client configuration
 ├── navigation/         # Navigation setup
 └── utils/              # Utility functions
 ```
