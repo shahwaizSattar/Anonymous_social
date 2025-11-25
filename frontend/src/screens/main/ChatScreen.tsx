@@ -5,6 +5,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { chatAPI } from '../../services/api';
+import Toast from 'react-native-toast-message';
 
 type ChatRouteProp = RouteProp<RootStackParamList, 'Chat'>;
 
@@ -113,8 +114,11 @@ const ChatScreen: React.FC = () => {
       return updated;
     });
     setInput('');
-    chatAPI.sendMessage(peerId, trimmed).catch(() => {
-      // Optionally handle send failure UI
+    chatAPI.sendMessage(peerId, trimmed).catch((e: any) => {
+      const message = e?.response?.data?.message || 'Failed to send message';
+      // Roll back optimistic message on hard failure
+      setMessages(prev => prev.filter(m => m.id !== newMsg.id));
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
     });
   };
 

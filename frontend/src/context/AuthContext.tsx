@@ -100,6 +100,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           if (response.success) {
             setToken(storedToken);
             setUser(response.user);
+            // Expose user id globally for components like NotificationBell
+            (global as any).__authUserId = response.user?._id;
           } else {
             // Token is invalid, remove it
             await AsyncStorage.removeItem('authToken');
@@ -124,6 +126,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.success) {
         setToken(response.token || null);
         setUser(response.user);
+        if (response.user?._id) {
+          (global as any).__authUserId = response.user._id;
+        }
         if (response.token) {
           await AsyncStorage.setItem('authToken', response.token);
         }
@@ -178,6 +183,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       if (response.success) {
         setToken(response.token || null);
         setUser(response.user);
+        if (response.user?._id) {
+          (global as any).__authUserId = response.user._id;
+        }
         if (response.token) {
           await AsyncStorage.setItem('authToken', response.token);
         }
@@ -231,6 +239,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       await AsyncStorage.multiRemove(['authToken', 'userPreferences']);
       setToken(null);
       setUser(null);
+      // Clear global auth user id used by components like NotificationBell
+      try {
+        delete (global as any).__authUserId;
+      } catch {}
     } catch (error) {
       console.log('Logout error:', error);
     } finally {
@@ -250,6 +262,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         const response = await authAPI.verifyToken(token);
         if (response.success) {
           setUser(response.user);
+          if (response.user?._id) {
+            (global as any).__authUserId = response.user._id;
+          }
         }
       } catch (error) {
         console.log('Error refreshing user:', error);

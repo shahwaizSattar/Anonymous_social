@@ -5,6 +5,7 @@ import { RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/navigation';
 import { postsAPI, userAPI } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import Toast from 'react-native-toast-message';
 
 type UserProfileRouteProp = RouteProp<RootStackParamList, 'UserProfile'>;
 
@@ -52,8 +53,10 @@ const UserProfileScreen: React.FC = () => {
       const pagination = (postsRes as any).pagination;
       setHasMore(pagination ? !!pagination.hasMore : newPosts.length >= 20);
       if (!reset) setPage(p => p + 1);
-    } catch (e) {
+    } catch (e: any) {
       console.log('UserProfile load error', e);
+      const message = e?.response?.data?.message || 'Failed to load profile';
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
       // keep screen visible; show minimal header
       setProfile((prev: any) => prev || { username, bio: '', followers: [], following: [], stats: {} });
       if (reset) setPosts([]);

@@ -44,8 +44,10 @@ const MessagesScreen: React.FC = () => {
           return { _id: c._id, other: other || c.participants?.[0], last };
         });
         setItems(list);
-      } catch (e) {
+      } catch (e: any) {
         setItems([]);
+        const message = e?.response?.data?.message || 'Failed to load conversations';
+        Toast.show({ type: 'error', text1: 'Error', text2: message });
       } finally {
         setLoading(false);
       }

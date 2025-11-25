@@ -36,9 +36,17 @@ const HomeScreen: React.FC = () => {
       const response = await postsAPI.getFeed(1, 20); // API call
       if (response.success) {
         setPosts(response.data || []);
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: response.message || 'Failed to load feed',
+        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.log('Error loading posts:', error);
+      const message = error?.response?.data?.message || 'Failed to load feed';
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
     } finally {
       setLoading(false);
     }

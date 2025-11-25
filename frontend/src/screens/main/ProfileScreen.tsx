@@ -15,6 +15,7 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { postsAPI } from '../../services/api';
+import Toast from 'react-native-toast-message';
 // import { VideoView } from 'expo-video';
 
 const ProfileScreen: React.FC = () => {
@@ -36,8 +37,10 @@ const ProfileScreen: React.FC = () => {
       const response: any = await postsAPI.getUserPosts(user.username, 1, 20);
       const posts = response.posts || response.data || [];
       setUserPosts(posts);
-    } catch (error) {
+    } catch (error: any) {
       console.log('Error loading user posts:', error);
+      const message = error?.response?.data?.message || 'Failed to load your posts';
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
     } finally {
       setLoading(false);
     }

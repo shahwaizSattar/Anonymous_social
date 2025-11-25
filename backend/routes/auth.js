@@ -119,4 +119,40 @@ router.post('/verify-token', async (req, res) => {
   }
 });
 
+// POST /api/auth/refresh-token
+// Lightweight refresh endpoint implied by authAPI.refreshToken.
+// It verifies the provided token and issues a new one with the same userId payload.
+router.post('/refresh-token', async (req, res) => {
+  try {
+    const { token } = req.body;
+    if (!token) {
+      return res.status(400).json({ success: false, message: 'Token is required' });
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'fallback-secret');
+    const user = await User.findById(decoded.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const newToken = generateToken(user._id);
+
+    res.json({
+      success: true,
+      message: 'Token refreshed successfully',
+      token: newToken,
+      user,
+    });
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ success: false, message: 'Token expired' });
+    }
+    console.error('Token refresh error:', error);
+    res.status(500).json({ success: false, message: 'Server error during token refresh' });
+  }
+});
+
 module.exports = router;

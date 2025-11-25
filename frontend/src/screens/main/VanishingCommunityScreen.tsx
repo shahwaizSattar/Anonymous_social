@@ -101,9 +101,10 @@ const VanishingCommunityScreen: React.FC = () => {
         console.log('👻 Failed to load posts:', response.message);
         Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to load posts' });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('👻 Error loading WhisperWall posts:', error);
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to load posts' });
+      const message = error?.response?.data?.message || 'Failed to load posts';
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
     } finally {
       setLoading(false);
     }
@@ -289,7 +290,8 @@ const VanishingCommunityScreen: React.FC = () => {
       console.log('❌ WhisperWall post creation error:', error);
       console.log('❌ Error response:', error.response?.data);
       console.log('❌ Error status:', error.response?.status);
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Something went wrong' });
+      const message = error?.response?.data?.message || 'Something went wrong';
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
     } finally {
       setIsPosting(false);
     }
@@ -306,8 +308,10 @@ const VanishingCommunityScreen: React.FC = () => {
             : post
         ));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding reaction:', error);
+      const message = error?.response?.data?.message || 'Failed to update reaction';
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
     }
   };
 
