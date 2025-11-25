@@ -28,8 +28,20 @@ import NotificationBell from '../../components/NotificationBell';
 import ReactionPopup from '../../components/ReactionPopup';
 import PostOptions from '../../components/PostOptions';
 import { convertAvatarUrl } from '../../utils/imageUtils';
+import { censorText } from '../../utils/censorUtils';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
+
+type ReactionType = 'funny' | 'rage' | 'shock' | 'relatable' | 'love' | 'thinking';
+
+const REACTION_ICONS: Record<ReactionType, string> = {
+  funny: '😂',
+  rage: '😡',
+  shock: '😱',
+  relatable: '💯',
+  love: '❤️',
+  thinking: '🤔',
+};
 
 const HomeScreen: React.FC = () => {
   const { theme } = useTheme();
@@ -158,21 +170,23 @@ const HomeScreen: React.FC = () => {
         });
       }
       
-      // Update the post in state immediately with the response data
+      console.log('Reaction response:', response);
+      
       if (response.success && response.reactions) {
         setPosts(prevPosts => 
-          prevPosts.map(p => 
-            p._id === postId 
-              ? { 
-                  ...p, 
-                  reactionCounts: response.reactions,
-                  userReaction: response.userReaction || null
-                }
-              : p
-          )
+          prevPosts.map(p => {
+            if (p._id === postId) {
+              return { 
+                ...p, 
+                reactionCounts: response.reactions,
+                userReaction: response.userReaction || null
+              };
+            }
+            return p;
+          })
         );
       } else {
-        // Fallback: refresh posts if response doesn't have expected data
+        console.error('Invalid response format:', response);
         await loadPosts();
       }
     } catch (error) {
@@ -801,7 +815,7 @@ const HomeScreen: React.FC = () => {
                   </View>
                 )}
               </View>
-              {post.content?.text && <Text style={[styles.postText, { color: theme.colors.text }]} numberOfLines={3}>{post.content.text}</Text>}
+              {post.content?.text && <Text style={[styles.postText, { color: theme.colors.text }]} numberOfLines={3}>{censorText(post.content.text)}</Text>}
               {renderMedia(post.content.media)}
               
               {/* Like, Comment Actions */}
@@ -818,12 +832,11 @@ const HomeScreen: React.FC = () => {
                   style={[styles.actionBtn, post.userReaction && styles.activeActionBtn]}
                     onPress={(e) => {
                       e.stopPropagation();
-                      // Show popup on press - measure button position
                       showReactionPopup(post._id, e);
                     }}
                 >
                   <Text style={styles.actionBtnIcon}>
-                    {post.userReaction ? '👍' : '👍'}
+                    {post.userReaction ? REACTION_ICONS[post.userReaction as ReactionType] : '👍'}
                   </Text>
                   <Text style={styles.actionBtnText}>
                     {post.userReaction ? 'Liked' : 'Like'}

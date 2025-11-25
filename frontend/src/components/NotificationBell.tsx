@@ -61,15 +61,15 @@ const NotificationBell: React.FC = () => {
         ref={buttonRef}
         onPress={handlePress}
       >
-        <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
-          <Text style={{ fontSize: 18 }}>🔔</Text>
-          {count > 0 && (
-            <View style={{ position: 'absolute', top: -4, right: -6, backgroundColor: '#FF3B30', borderRadius: 10, paddingHorizontal: 6, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
+      <View style={{ width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center' }}>
+        <Text style={{ fontSize: 18 }}>🔔</Text>
+        {count > 0 && (
+          <View style={{ position: 'absolute', top: -4, right: -6, backgroundColor: '#FF3B30', borderRadius: 10, paddingHorizontal: 6, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center' }}>
               <Text style={{ color: '#fff', fontSize: 10, fontWeight: '700' }}>{count > 99 ? '99+' : count}</Text>
-            </View>
-          )}
-        </View>
-      </TouchableOpacity>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
       <NotificationDropdown
         visible={dropdownVisible}
         onClose={() => setDropdownVisible(false)}

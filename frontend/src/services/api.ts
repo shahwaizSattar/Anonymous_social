@@ -124,6 +124,30 @@ export const authAPI = {
     });
     return response.data;
   },
+
+  requestPasswordReset: async (emailOrPhone: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post('/auth/forgot-password', {
+      emailOrPhone,
+    });
+    return response.data;
+  },
+
+  verifyResetCode: async (emailOrPhone: string, code: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post('/auth/verify-reset-code', {
+      emailOrPhone,
+      code,
+    });
+    return response.data;
+  },
+
+  resetPassword: async (emailOrPhone: string, code: string, newPassword: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post('/auth/reset-password', {
+      emailOrPhone,
+      code,
+      newPassword,
+    });
+    return response.data;
+  },
 };
 
 // User API
@@ -140,6 +164,21 @@ export const userAPI = {
     settings?: any;
   }): Promise<ApiResponse> => {
     const response: AxiosResponse<ApiResponse> = await api.put('/user/profile', userData);
+    return response.data;
+  },
+
+  changePassword: async (currentPassword: string, newPassword: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.put('/user/change-password', {
+      currentPassword,
+      newPassword,
+    });
+    return response.data;
+  },
+
+  changeUsername: async (newUsername: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.put('/user/change-username', {
+      newUsername,
+    });
     return response.data;
   },
 
@@ -313,6 +352,24 @@ export const postsAPI = {
       content,
       isAnonymous,
     });
+    return response.data;
+  },
+
+  editPost: async (postId: string, postData: {
+    content?: {
+      text: string;
+      media?: Array<{
+        url: string;
+        type: 'image' | 'video' | 'audio';
+        filename: string;
+        originalName: string;
+        size: number;
+      }>;
+    };
+    category?: string;
+    tags?: string[];
+  }): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.put(`/posts/${postId}`, postData);
     return response.data;
   },
 

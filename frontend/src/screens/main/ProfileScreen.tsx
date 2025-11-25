@@ -20,6 +20,7 @@ import { useAuth } from '../../context/AuthContext';
 import { postsAPI } from '../../services/api';
 import LogoutAnimation from '../../components/LogoutAnimation';
 import UserPostOptions from '../../components/UserPostOptions';
+import EditPostModal from '../../components/EditPostModal';
 import { convertAvatarUrl } from '../../utils/imageUtils';
 import Toast from 'react-native-toast-message';
 // import { VideoView } from 'expo-video';
@@ -38,6 +39,13 @@ const ProfileScreen: React.FC = () => {
   }>({
     visible: false,
     postId: '',
+  });
+  const [editPostModal, setEditPostModal] = useState<{
+    visible: boolean;
+    post: any | null;
+  }>({
+    visible: false,
+    post: null,
   });
 
   const loadUserPosts = async () => {
@@ -328,6 +336,7 @@ const ProfileScreen: React.FC = () => {
   };
 
   const menuItems = [
+    { icon: '✏️', title: 'Edit Profile', onPress: () => navigation.navigate('EditProfile' as never) },
     { icon: '💬', title: 'Messages', onPress: () => navigation.navigate('Messages' as never) },
     { icon: '⚙️', title: 'Settings', onPress: () => navigation.navigate('Settings' as never) },
     { icon: '🔔', title: 'Notifications', onPress: () => navigation.navigate('Notifications' as never) },
@@ -340,9 +349,9 @@ const ProfileScreen: React.FC = () => {
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
-      <ScrollView 
-        style={styles.container}
-        refreshControl={
+    <ScrollView 
+      style={styles.container}
+      refreshControl={
         <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
       }
     >
@@ -425,7 +434,7 @@ const ProfileScreen: React.FC = () => {
           userPosts.map((post: any) => (
             <View key={post._id} style={styles.postCard}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: theme.spacing.sm }}>
-                <Text style={styles.postCategory}>#{post.category}</Text>
+              <Text style={styles.postCategory}>#{post.category}</Text>
                 <TouchableOpacity
                   onPress={() => {
                     setPostOptions({
@@ -531,12 +540,13 @@ const ProfileScreen: React.FC = () => {
       visible={postOptions.visible}
       onClose={() => setPostOptions({ visible: false, postId: '' })}
       onEdit={() => {
-        // TODO: Navigate to edit post screen or show edit modal
-        Toast.show({
-          type: 'info',
-          text1: 'Edit Post',
-          text2: 'Edit functionality coming soon!',
-        });
+        const post = userPosts.find(p => p._id === postOptions.postId);
+        if (post) {
+          setEditPostModal({
+            visible: true,
+            post,
+          });
+        }
       }}
       onDelete={async () => {
         try {
@@ -546,7 +556,6 @@ const ProfileScreen: React.FC = () => {
             text1: 'Post Deleted',
             text2: 'Your post has been deleted successfully.',
           });
-          // Remove post from list
           setUserPosts(userPosts.filter(p => p._id !== postOptions.postId));
           setPostOptions({ visible: false, postId: '' });
         } catch (error) {
@@ -556,6 +565,15 @@ const ProfileScreen: React.FC = () => {
             text2: 'Failed to delete post. Please try again.',
           });
         }
+      }}
+    />
+    <EditPostModal
+      visible={editPostModal.visible}
+      post={editPostModal.post}
+      onClose={() => setEditPostModal({ visible: false, post: null })}
+      onSuccess={() => {
+        loadUserPosts();
+        setPostOptions({ visible: false, postId: '' });
       }}
     />
     </SafeAreaView>

@@ -20,6 +20,7 @@ import { RouteProp, useRoute, useNavigation } from '@react-navigation/native';
 import { RootStackParamList } from '../../types/navigation';
 import Toast from 'react-native-toast-message';
 import { convertAvatarUrl } from '../../utils/imageUtils';
+import { censorText } from '../../utils/censorUtils';
 // import { VideoView } from 'expo-video';
 
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetail'>;
@@ -411,7 +412,8 @@ const PostDetailScreen = () => {
         });
       }
       
-      // Update the post in state immediately with the response data
+      console.log('Reaction response:', response);
+      
       if (response.success && response.reactions) {
         setPost(prevPost => 
           prevPost ? {
@@ -421,7 +423,7 @@ const PostDetailScreen = () => {
           } : null
         );
       } else {
-        // Fallback: refresh post if response doesn't have expected data
+        console.error('Invalid response format:', response);
         fetchPost();
       }
     } catch (error) {
@@ -609,7 +611,7 @@ const PostDetailScreen = () => {
               #{post.category}
             </Text>
             <Text style={[styles.postContent, { color: theme.colors.text }]}>
-              {post.content.text}
+              {censorText(post.content.text)}
             </Text>
             {renderMedia(post.content.media)}
             <ReactionBar />
@@ -635,7 +637,7 @@ const PostDetailScreen = () => {
               </Text>
             </View>
             <Text style={[styles.commentContent, { color: theme.colors.text }]}>
-              {item.content}
+              {censorText(item.content)}
             </Text>
           </View>
         )}

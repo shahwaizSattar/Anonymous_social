@@ -22,6 +22,7 @@ import SettingsScreen from '../screens/main/SettingsScreen';
 import ChatScreen from '../screens/main/ChatScreen';
 import MessagesScreen from '../screens/main/MessagesScreen';
 import NotificationsScreen from '../screens/main/NotificationsScreen';
+import EditProfileScreen from '../screens/main/EditProfileScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -268,6 +269,13 @@ const MainNavigator: React.FC = () => {
         component={MessengerScreen}
         options={{
           title: 'Messages'
+        }}
+      />
+      <Stack.Screen
+        name="EditProfile"
+        component={EditProfileScreen}
+        options={{
+          headerShown: false
         }}
       />
     </Stack.Navigator>

@@ -8,7 +8,10 @@ import { postsAPI, userAPI } from '../../services/api';
 import { reactionsAPI } from '../../services/reactions';
 import { useAuth } from '../../context/AuthContext';
 import { convertAvatarUrl } from '../../utils/imageUtils';
+import { censorText } from '../../utils/censorUtils';
 import ReactionPopup from '../../components/ReactionPopup';
+import UserPostOptions from '../../components/UserPostOptions';
+import EditPostModal from '../../components/EditPostModal';
 import Toast from 'react-native-toast-message';
 
 type UserProfileRouteProp = RouteProp<RootStackParamList, 'UserProfile'>;
@@ -36,6 +39,20 @@ const UserProfileScreen: React.FC = () => {
     visible: false,
     postId: '',
     position: { x: 0, y: 0 },
+  });
+  const [postOptions, setPostOptions] = useState<{
+    visible: boolean;
+    postId: string;
+  }>({
+    visible: false,
+    postId: '',
+  });
+  const [editPostModal, setEditPostModal] = useState<{
+    visible: boolean;
+    post: any | null;
+  }>({
+    visible: false,
+    post: null,
   });
   const likeButtonRefs = useRef<{ [key: string]: any }>({});
   const scanLineAnim = useRef(new Animated.Value(0)).current;
@@ -432,7 +449,27 @@ const UserProfileScreen: React.FC = () => {
             <Text style={[styles.username, { color: theme.colors.text }]}>{post.author?.username || 'Unknown User'}</Text>
           </TouchableOpacity>
         </View>
-        <Text style={[styles.postDate, { color: theme.colors.textSecondary }]}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Text style={[styles.postDate, { color: theme.colors.textSecondary }]}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+          {isOwnProfile && (
+            <TouchableOpacity
+              onPress={(e) => {
+                e.stopPropagation();
+                setPostOptions({
+                  visible: true,
+                  postId: post._id,
+                });
+              }}
+              style={{
+                padding: 8,
+                borderRadius: 20,
+              }}
+              activeOpacity={0.6}
+            >
+              <Text style={{ fontSize: 18 }}>⋯</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
       <View style={styles.postTags}>
         {post.category && <Text style={[styles.postCategory, { color: theme.colors.primary }]}>#{post.category}</Text>}
@@ -456,7 +493,7 @@ const UserProfileScreen: React.FC = () => {
           </View>
         )}
       </View>
-      {post.content?.text && <Text style={[styles.postText, { color: theme.colors.text }]} numberOfLines={3}>{post.content.text}</Text>}
+      {post.content?.text && <Text style={[styles.postText, { color: theme.colors.text }]} numberOfLines={3}>{censorText(post.content.text)}</Text>}
       {renderMedia(post.content?.media)}
       
       {/* Like, Comment Actions */}
@@ -974,6 +1011,46 @@ const styles = StyleSheet.create({
         position={reactionPopup.position}
         onSelect={handleReactionSelect}
         onClose={hideReactionPopup}
+      />
+      <UserPostOptions
+        visible={postOptions.visible}
+        onClose={() => setPostOptions({ visible: false, postId: '' })}
+        onEdit={() => {
+          const post = posts.find(p => p._id === postOptions.postId);
+          if (post) {
+            setEditPostModal({
+              visible: true,
+              post,
+            });
+          }
+        }}
+        onDelete={async () => {
+          try {
+            await postsAPI.deletePost(postOptions.postId);
+            Toast.show({
+              type: 'success',
+              text1: 'Post Deleted',
+              text2: 'Your post has been deleted successfully.',
+            });
+            setPosts(posts.filter(p => p._id !== postOptions.postId));
+            setPostOptions({ visible: false, postId: '' });
+          } catch (error) {
+            Toast.show({
+              type: 'error',
+              text1: 'Error',
+              text2: 'Failed to delete post. Please try again.',
+            });
+          }
+        }}
+      />
+      <EditPostModal
+        visible={editPostModal.visible}
+        post={editPostModal.post}
+        onClose={() => setEditPostModal({ visible: false, post: null })}
+        onSuccess={() => {
+          loadProfileAndPosts(true);
+          setPostOptions({ visible: false, postId: '' });
+        }}
       />
     </SafeAreaView>
   );

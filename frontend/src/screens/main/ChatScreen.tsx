@@ -138,19 +138,19 @@ const ChatScreen: React.FC = () => {
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <SafeAreaView edges={['top']} style={{ backgroundColor: theme.colors.surface }}>
         <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => { chatAPI.markRead(peerId).finally(() => (navigation as any).goBack()); }} style={{ marginRight: 12 }}>
-            <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Back</Text>
-          </TouchableOpacity>
-          {avatar ? (
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => { chatAPI.markRead(peerId).finally(() => (navigation as any).goBack()); }} style={{ marginRight: 12 }}>
+          <Text style={{ color: theme.colors.primary, fontWeight: '700' }}>Back</Text>
+        </TouchableOpacity>
+        {avatar ? (
             <Image source={{ uri: convertAvatarUrl(avatar) || '' }} style={styles.headerAvatar} />
-          ) : (
-            <View style={[styles.headerAvatar, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}> 
-              <Text style={{ color: theme.colors.textInverse, fontWeight: '700' }}>{username.charAt(0).toUpperCase()}</Text>
-            </View>
-          )}
-          <Text style={styles.headerName}>@{username}</Text>
-        </View>
+        ) : (
+          <View style={[styles.headerAvatar, { backgroundColor: theme.colors.primary, justifyContent: 'center', alignItems: 'center' }]}> 
+            <Text style={{ color: theme.colors.textInverse, fontWeight: '700' }}>{username.charAt(0).toUpperCase()}</Text>
+          </View>
+        )}
+        <Text style={styles.headerName}>@{username}</Text>
+      </View>
       </SafeAreaView>
       <FlatList
         ref={listRef}

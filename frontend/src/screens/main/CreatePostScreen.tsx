@@ -231,8 +231,8 @@ const CreatePostScreen: React.FC = () => {
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
-      <View style={styles.container}>
-        <View style={styles.header}>
+    <View style={styles.container}>
+      <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
           <Text style={{ fontSize: 16, color: '#888' }}>Cancel</Text>
         </TouchableOpacity>
@@ -300,7 +300,7 @@ const CreatePostScreen: React.FC = () => {
           </View>
         </View>
       </ScrollView>
-      </View>
+    </View>
     </SafeAreaView>
   );
 };

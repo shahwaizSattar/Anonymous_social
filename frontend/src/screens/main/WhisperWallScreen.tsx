@@ -28,6 +28,7 @@ import Toast from 'react-native-toast-message';
 import { useNavigation } from '@react-navigation/native';
 import ReactionPopup from '../../components/ReactionPopup';
 import { convertAvatarUrl } from '../../utils/imageUtils';
+import { censorText } from '../../utils/censorUtils';
 
 const WhisperWallScreen: React.FC = () => {
   const { theme } = useTheme();
@@ -537,9 +538,9 @@ const WhisperWallScreen: React.FC = () => {
       marginLeft: theme.spacing.sm,
     },
     content: { flex: 1, paddingHorizontal: 0, paddingVertical: 0 },
-    placeholderContainer: { 
-      flex: 1, 
-      justifyContent: 'center', 
+    placeholderContainer: {
+      flex: 1,
+      justifyContent: 'center',
       alignItems: 'center',
       padding: theme.spacing.xl,
     },
@@ -841,25 +842,25 @@ const WhisperWallScreen: React.FC = () => {
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
-      <View style={styles.container}>
-        {/* Header */}
-        <LinearGradient
-          colors={[theme.colors.surface, theme.colors.background]}
-          style={styles.header}
-        >
-          <Text style={styles.title}>WhisperWall 👻</Text>
-          <Text style={styles.subtitle}>
+    <View style={styles.container}>
+      {/* Header */}
+      <LinearGradient
+        colors={[theme.colors.surface, theme.colors.background]}
+        style={styles.header}
+      >
+        <Text style={styles.title}>WhisperWall 👻</Text>
+        <Text style={styles.subtitle}>
             Your anonymous sanctuary • All posts disappear in 24 hours
-          </Text>
-          <View style={styles.timerContainer}>
-            <Text>⏰</Text>
-            <Text style={styles.timerText}>
+        </Text>
+        <View style={styles.timerContainer}>
+          <Text>⏰</Text>
+          <Text style={styles.timerText}>
               Next cleanup in {timeRemaining}
-            </Text>
-          </View>
-        </LinearGradient>
+          </Text>
+        </View>
+      </LinearGradient>
 
-        {/* Content */}
+      {/* Content */}
         <ScrollView
           style={styles.content}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
@@ -886,9 +887,9 @@ const WhisperWallScreen: React.FC = () => {
                       )}
                       <Text style={[styles.username, { color: theme.colors.text }]}>
                         {post.randomUsername || 'Anonymous'}
-                      </Text>
-                    </View>
-                  </View>
+                </Text>
+              </View>
+            </View>
                   <Text style={[styles.postDate, { color: theme.colors.textSecondary }]}>
                     {post.expiresAt ? formatTimeRemaining(post.expiresAt) : '24h left'}
                   </Text>
@@ -908,7 +909,7 @@ const WhisperWallScreen: React.FC = () => {
                     </View>
                   )}
                 </View>
-                {post.content?.text && <Text style={[styles.postText, { color: theme.colors.text }]} numberOfLines={3}>{post.content.text}</Text>}
+                {post.content?.text && <Text style={[styles.postText, { color: theme.colors.text }]} numberOfLines={3}>{censorText(post.content.text)}</Text>}
                 {renderMedia(post.content?.media)}
                 
                 {/* Like, Comment Actions */}
@@ -954,8 +955,8 @@ const WhisperWallScreen: React.FC = () => {
                       <Text style={styles.actionBtnCount}>{post.comments?.length || 0}</Text>
                     </TouchableOpacity>
                   </View>
-                </View>
-                
+        </View>
+
                 <View style={styles.postMeta}>
                   <Text style={[styles.reactionText, { color: theme.colors.textSecondary }]}>
                     {(post.reactions?.funny || 0) + (post.reactions?.rage || 0) + (post.reactions?.shock || 0) + 
@@ -970,104 +971,104 @@ const WhisperWallScreen: React.FC = () => {
               <Text style={styles.placeholderTitle}>Loading whispers...</Text>
             </View>
           ) : (
-            <View style={styles.placeholderContainer}>
-              <Text style={styles.placeholderIcon}>💭</Text>
-              <Text style={styles.placeholderTitle}>
-                The Wall Awaits Your Whisper
-              </Text>
-              <Text style={styles.placeholderText}>
-                Share your deepest thoughts, confessions, or random musings completely anonymously. No judgement, just authentic human connection.
-              </Text>
-              <TouchableOpacity style={styles.createButton} onPress={openCreateModal}>
-                <Text style={styles.createButtonText}>
-                  Share a Whisper
-                </Text>
-              </TouchableOpacity>
-            </View>
+        <View style={styles.placeholderContainer}>
+          <Text style={styles.placeholderIcon}>💭</Text>
+          <Text style={styles.placeholderTitle}>
+            The Wall Awaits Your Whisper
+          </Text>
+          <Text style={styles.placeholderText}>
+            Share your deepest thoughts, confessions, or random musings completely anonymously. No judgement, just authentic human connection.
+          </Text>
+          <TouchableOpacity style={styles.createButton} onPress={openCreateModal}>
+            <Text style={styles.createButtonText}>
+              Share a Whisper
+            </Text>
+          </TouchableOpacity>
+        </View>
           )}
         </ScrollView>
 
-        {/* Floating Action Button */}
-        <TouchableOpacity style={styles.floatingButton} onPress={openCreateModal}>
-          <Text style={styles.floatingButtonText}>+</Text>
-        </TouchableOpacity>
+      {/* Floating Action Button */}
+      <TouchableOpacity style={styles.floatingButton} onPress={openCreateModal}>
+        <Text style={styles.floatingButtonText}>+</Text>
+      </TouchableOpacity>
 
-        {/* Create Whisper Modal */}
-        <Modal
-          visible={showCreateModal}
-          transparent
-          animationType="none"
-          onRequestClose={closeCreateModal}
-        >
-          <View style={styles.modalOverlay}>
-            <Animated.View style={[styles.modalContent, animatedModalStyle]}>
-              <Text style={styles.modalTitle}>Share a Whisper</Text>
-              <Text style={styles.modalSubtitle}>
-                Your identity will remain completely anonymous
-              </Text>
+      {/* Create Whisper Modal */}
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="none"
+        onRequestClose={closeCreateModal}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View style={[styles.modalContent, animatedModalStyle]}>
+            <Text style={styles.modalTitle}>Share a Whisper</Text>
+            <Text style={styles.modalSubtitle}>
+              Your identity will remain completely anonymous
+            </Text>
 
-              {/* Mood Selector */}
-              <View style={styles.moodSelector}>
-                <Text style={styles.moodLabel}>Choose your mood:</Text>
-                <View style={styles.moodOptions}>
-                  {moods.map((mood) => (
-                    <TouchableOpacity
-                      key={mood.id}
-                      style={[
-                        styles.moodOption,
-                        selectedMood === mood.id && styles.moodOptionSelected,
-                      ]}
-                      onPress={() => setSelectedMood(mood.id)}
-                    >
-                      <Text style={styles.moodIcon}>{mood.icon}</Text>
-                      <Text style={styles.moodName}>{mood.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+            {/* Mood Selector */}
+            <View style={styles.moodSelector}>
+              <Text style={styles.moodLabel}>Choose your mood:</Text>
+              <View style={styles.moodOptions}>
+                {moods.map((mood) => (
+                  <TouchableOpacity
+                    key={mood.id}
+                    style={[
+                      styles.moodOption,
+                      selectedMood === mood.id && styles.moodOptionSelected,
+                    ]}
+                    onPress={() => setSelectedMood(mood.id)}
+                  >
+                    <Text style={styles.moodIcon}>{mood.icon}</Text>
+                    <Text style={styles.moodName}>{mood.name}</Text>
+                  </TouchableOpacity>
+                ))}
               </View>
+            </View>
 
-              {/* Text Input */}
-              <TextInput
-                style={styles.textInput}
-                placeholder="What's on your mind? Share your whisper..."
-                placeholderTextColor={theme.colors.textSecondary}
-                value={whisperText}
-                onChangeText={setWhisperText}
-                multiline
-                maxLength={2000}
-                returnKeyType="done"
-                blurOnSubmit={true}
-                textAlignVertical="top"
-              />
+            {/* Text Input */}
+            <TextInput
+              style={styles.textInput}
+              placeholder="What's on your mind? Share your whisper..."
+              placeholderTextColor={theme.colors.textSecondary}
+              value={whisperText}
+              onChangeText={setWhisperText}
+              multiline
+              maxLength={2000}
+              returnKeyType="done"
+              blurOnSubmit={true}
+              textAlignVertical="top"
+            />
 
-              {/* Buttons */}
-              <View style={styles.modalButtons}>
-                <TouchableOpacity
-                  style={[styles.modalButton, styles.cancelButton]}
-                  onPress={closeCreateModal}
-                >
-                  <Text style={[styles.buttonText, styles.cancelButtonText]}>
-                    Cancel
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[
-                    styles.modalButton, 
-                    styles.submitButton,
-                    (!whisperText.trim() || !selectedMood || isSubmitting) && styles.submitButtonDisabled
-                  ]}
-                  disabled={!whisperText.trim() || !selectedMood || isSubmitting}
-                  onPress={handleSubmitWhisper}
-                >
-                  <Text style={[styles.buttonText, styles.submitButtonText]}>
-                    {isSubmitting ? 'Sharing...' : 'Share Whisper'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </Animated.View>
-          </View>
-        </Modal>
-      </View>
+            {/* Buttons */}
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={closeCreateModal}
+              >
+                <Text style={[styles.buttonText, styles.cancelButtonText]}>
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton, 
+                  styles.submitButton,
+                  (!whisperText.trim() || !selectedMood || isSubmitting) && styles.submitButtonDisabled
+                ]}
+                disabled={!whisperText.trim() || !selectedMood || isSubmitting}
+                onPress={handleSubmitWhisper}
+              >
+                <Text style={[styles.buttonText, styles.submitButtonText]}>
+                  {isSubmitting ? 'Sharing...' : 'Share Whisper'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
+    </View>
       <ReactionPopup
         visible={reactionPopup.visible}
         position={reactionPopup.position}

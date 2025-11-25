@@ -264,7 +264,7 @@ const SettingsScreen: React.FC = () => {
               <Text style={{ fontWeight: '600' }}>💡 Tip:</Text> The theme you select will be applied to all screens in the app, including Home, Profile, Messages, and more. Your preference is saved automatically.
             </Text>
           </View>
-        </View>
+    </View>
       </ScrollView>
     </SafeAreaView>
   );

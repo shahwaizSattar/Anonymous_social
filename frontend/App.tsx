@@ -21,6 +21,7 @@ import LoginScreen from './src/screens/auth/LoginScreen';
 import SignupScreen from './src/screens/auth/SignupScreen';
 import PreferenceScreen from './src/screens/auth/PreferenceScreen';
 import AvatarSelectionScreen from './src/screens/auth/AvatarSelectionScreen';
+import ForgotPasswordScreen from './src/screens/auth/ForgotPasswordScreen';
 import MainNavigator from './src/navigation/MainNavigator';
 
 // Components
@@ -131,6 +132,7 @@ const AppContent = () => {
                 <Stack.Screen name="Onboarding" component={OnboardingScreen} />
               )}
               <Stack.Screen name="Login" component={LoginScreen} />
+              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
               <Stack.Screen name="Signup" component={SignupScreen} />
               <Stack.Screen name="Preference" component={PreferenceScreen} />
               <Stack.Screen name="AvatarSelection" component={AvatarSelectionScreen} />

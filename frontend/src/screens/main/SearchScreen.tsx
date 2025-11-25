@@ -395,9 +395,9 @@ const SearchScreen: React.FC = () => {
   return (
     <SafeAreaView edges={['top']} style={[styles.container, { backgroundColor: theme.colors.background }]}>
       <StatusBar barStyle={theme.dark ? 'light-content' : 'dark-content'} />
-      <View style={styles.container}>
-        {/* Header */}
-        <View style={styles.header}>
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => navigation.goBack()}
@@ -474,7 +474,7 @@ const SearchScreen: React.FC = () => {
           </View>
         )}
       </ScrollView>
-      </View>
+    </View>
     </SafeAreaView>
   );
 };
