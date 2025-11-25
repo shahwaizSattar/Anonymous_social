@@ -11,7 +11,8 @@ import {
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
 import { useAuth } from '../../context/AuthContext';
-import { convertAvatarUrl } from '../../utils/imageUtils';
+import { userAPI } from '../../services/api';
+import Toast from 'react-native-toast-message';
 
 interface Notification {
   id: string;
@@ -40,88 +41,43 @@ const NotificationsScreen: React.FC = () => {
     loadNotifications();
   }, []);
 
-  const loadNotifications = () => {
-    // Mock data - replace with actual API calls
-    const mockNotifications: Notification[] = [
-      {
-        id: '1',
-        type: 'like',
-        user: {
-          id: '2',
-          username: 'alice_wonder',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=alice',
-        },
-        content: 'liked your post about gaming setup',
-        timestamp: Date.now() - 1000 * 60 * 15, // 15 minutes ago
-        isRead: false,
-        postId: 'post1',
-      },
-      {
-        id: '2',
-        type: 'comment',
-        user: {
-          id: '3',
-          username: 'bob_builder',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=bob',
-        },
-        content: 'commented on your post: "Great tips!"',
-        timestamp: Date.now() - 1000 * 60 * 30, // 30 minutes ago
-        isRead: false,
-        postId: 'post1',
-        commentId: 'comment1',
-      },
-      {
-        id: '3',
-        type: 'follow',
-        user: {
-          id: '4',
-          username: 'charlie_dev',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=charlie',
-        },
-        content: 'started following you',
-        timestamp: Date.now() - 1000 * 60 * 60, // 1 hour ago
-        isRead: true,
-      },
-      {
-        id: '4',
-        type: 'request',
-        user: {
-          id: '5',
-          username: 'diana_artist',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=diana',
-        },
-        content: 'sent you a friend request',
-        timestamp: Date.now() - 1000 * 60 * 60 * 2, // 2 hours ago
-        isRead: false,
-      },
-      {
-        id: '5',
-        type: 'invite',
-        user: {
-          id: '6',
-          username: 'eve_musician',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=eve',
-        },
-        content: 'invited you to join "Music Lovers" group',
-        timestamp: Date.now() - 1000 * 60 * 60 * 4, // 4 hours ago
-        isRead: true,
-        groupId: 'group1',
-      },
-      {
-        id: '6',
-        type: 'mention',
-        user: {
-          id: '7',
-          username: 'frank_writer',
-          avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=frank',
-        },
-        content: 'mentioned you in a post',
-        timestamp: Date.now() - 1000 * 60 * 60 * 6, // 6 hours ago
-        isRead: true,
-        postId: 'post2',
-      },
-    ];
-    setNotifications(mockNotifications);
+  const loadNotifications = async () => {
+    try {
+      // Load from backend using existing userAPI.getNotifications helper
+      const response: any = await userAPI.getNotifications();
+
+      const backendNotifications = Array.isArray(response.notifications)
+        ? response.notifications
+        : [];
+
+      const mapped: Notification[] = backendNotifications.map((n: any, index: number) => ({
+        id: String(n.id || index),
+        type: (n.type as Notification['type']) || 'mention',
+        user: n.user && n.user.username
+          ? {
+              id: String(n.user.id || ''),
+              username: String(n.user.username || 'someone'),
+              avatar: n.user.avatar,
+            }
+          : {
+              id: '',
+              username: 'Someone',
+            },
+        content: String(n.message || n.content || ''),
+        timestamp: new Date(n.timestamp || Date.now()).getTime(),
+        isRead: Boolean(n.read ?? n.isRead ?? false),
+        postId: n.postId,
+        commentId: n.commentId,
+        groupId: n.groupId,
+      }));
+
+      setNotifications(mapped);
+    } catch (error: any) {
+      // Fallback to empty list on error; backend already mocks some data in /user/notifications
+      setNotifications([]);
+      const message = error?.response?.data?.message || 'Failed to load notifications';
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
+    }
   };
 
   const markAsRead = (notificationId: string) => {
@@ -173,8 +129,8 @@ const NotificationsScreen: React.FC = () => {
       // Navigate to group
       console.log('Navigate to group:', notification.groupId);
     } else {
-      // Navigate to user profile
-      navigation.navigate('Profile' as never, { username: notification.user.username } as never);
+      // Navigate to user profile (UserProfile stack screen)
+      navigation.navigate('UserProfile' as never, { username: notification.user.username } as never);
     }
   };
 
@@ -205,7 +161,7 @@ const NotificationsScreen: React.FC = () => {
           </Text>
         </View>
         {item.user.avatar && (
-          <Image source={{ uri: convertAvatarUrl(item.user.avatar) || '' }} style={styles.userAvatar} />
+          <Image source={{ uri: item.user.avatar }} style={styles.userAvatar} />
         )}
       </View>
     </TouchableOpacity>

@@ -222,7 +222,8 @@ const CreatePostScreen: React.FC = () => {
         Toast.show({ type: 'error', text1: 'Error', text2: response.message || 'Failed to post' });
       }
     } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Something went wrong' });
+      const message = error?.response?.data?.message || 'Something went wrong';
+      Toast.show({ type: 'error', text1: 'Error', text2: message });
     } finally {
       setIsCreating(false);
     }
@@ -254,6 +255,7 @@ const CreatePostScreen: React.FC = () => {
           value={postText}
           onChangeText={setPostText}
           multiline
+          maxLength={2000}
         />
         <Text style={styles.characterCount}>{postText.length}/2000</Text>
 

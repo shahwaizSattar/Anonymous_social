@@ -1,6 +1,5 @@
-// Load .env from root directory (one level up from backend)
-require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
-console.log("✅ Loaded MONGODB_URI:", process.env.MONGODB_URI ? 'Found' : 'Not found');
+require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+console.log("✅ MONGODB_URI present:", !!process.env.MONGODB_URI);
 
 const express = require('express');
 const mongoose = require('mongoose');
@@ -10,6 +9,7 @@ const http = require('http');
 const socketIo = require('socket.io');
 const cron = require('node-cron');
 const path = require('path');
+const helmet = require('helmet');
 
 const app = express();
 const server = http.createServer(app);
@@ -31,9 +31,19 @@ const chatRoutes = require('./routes/chat');
 // Upload middleware
 const { uploadMiddleware, getFileUrl } = require('./middleware/upload');
 
+// --- Security headers ---
+app.use(helmet());
+
 // --- CORS Setup ---
+// In production, you can set CORS_ORIGINS as a comma-separated list of allowed origins.
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : null;
+
 const corsOptions = {
-  origin: true, // Allow all origins for development
+  origin: allowedOrigins && allowedOrigins.length > 0
+    ? allowedOrigins
+    : true, // Allow all origins when no explicit list is provided (useful for local/dev)
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   credentials: true
@@ -62,15 +72,35 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // --- Request logging middleware ---
 app.use((req, res, next) => {
   console.log(`📥 ${req.method} ${req.url} - ${new Date().toISOString()}`);
-  if (req.body && Object.keys(req.body).length > 0) {
+
+  const isSensitiveAuthRoute = req.path.startsWith('/api/auth');
+
+  if (!isSensitiveAuthRoute && req.body && Object.keys(req.body).length > 0) {
     console.log('📦 Request body:', JSON.stringify(req.body, null, 2));
   }
   next();
 });
 
 // --- Rate limiter ---
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 100 });
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
 app.use(limiter);
+
+// More strict limiter for auth endpoints to reduce abuse
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    message: 'Too many authentication attempts, please try again later.',
+  },
+});
 
 // --- Serve static files ---
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -78,18 +108,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // --- MongoDB connection ---
 const connectDB = async () => {
   try {
-    // Use Atlas URI from environment or fallback
-    let mongoURI = process.env.MONGODB_URI || 'mongodb+srv://blog-app:blog-app@blog-app.zi3j2.mongodb.net/whisper-echo?retryWrites=true&w=majority';
-    
-    // If URI doesn't have a database name, add it
-    if (mongoURI && !mongoURI.includes('/whisper-echo') && !mongoURI.match(/\/[^/?]+(\?|$)/)) {
-      // Insert database name before the query string or at the end
-      if (mongoURI.includes('?')) {
-        mongoURI = mongoURI.replace('?', '/whisper-echo?');
-      } else {
-        mongoURI = mongoURI + '/whisper-echo';
-      }
-    }
+    // Use URI from environment or fallback to local MongoDB for development
+    const mongoURI = process.env.MONGODB_URI || 'mongodb://localhost:27017/whisper-echo';
     
     console.log('🔌 Connecting to MongoDB Atlas...');
     
@@ -112,7 +132,7 @@ const connectDB = async () => {
 connectDB();
 
 // --- Routes ---
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/whisperwall', whisperWallRoutes);
