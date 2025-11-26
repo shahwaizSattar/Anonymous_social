@@ -27,6 +27,35 @@ interface AvatarOption {
   seed: string;
 }
 
+interface PreferenceCategory {
+  id: string;
+  name: string;
+  icon: string;
+  color: string;
+  description: string;
+}
+
+const categories: PreferenceCategory[] = [
+  { id: 'Gaming', name: 'Gaming', icon: '🎮', color: '#FF6B35', description: 'Video games, esports, streaming' },
+  { id: 'Education', name: 'Education', icon: '📚', color: '#4ECDC4', description: 'Learning, studies, knowledge' },
+  { id: 'Beauty', name: 'Beauty', icon: '💄', color: '#FFB6C1', description: 'Makeup, skincare, fashion' },
+  { id: 'Fitness', name: 'Fitness', icon: '💪', color: '#32CD32', description: 'Workouts, health, wellness' },
+  { id: 'Music', name: 'Music', icon: '🎵', color: '#9B59B6', description: 'Songs, artists, concerts' },
+  { id: 'Technology', name: 'Technology', icon: '💻', color: '#3498DB', description: 'Tech news, gadgets, coding' },
+  { id: 'Art', name: 'Art', icon: '🎨', color: '#E74C3C', description: 'Drawing, design, creativity' },
+  { id: 'Food', name: 'Food', icon: '🍕', color: '#F39C12', description: 'Cooking, recipes, restaurants' },
+  { id: 'Travel', name: 'Travel', icon: '✈️', color: '#1ABC9C', description: 'Adventures, destinations, culture' },
+  { id: 'Sports', name: 'Sports', icon: '⚽', color: '#27AE60', description: 'Athletes, teams, competitions' },
+  { id: 'Movies', name: 'Movies', icon: '🎬', color: '#8E44AD', description: 'Films, actors, reviews' },
+  { id: 'Books', name: 'Books', icon: '📖', color: '#D35400', description: 'Reading, authors, literature' },
+  { id: 'Fashion', name: 'Fashion', icon: '👗', color: '#E91E63', description: 'Style, trends, brands' },
+  { id: 'Photography', name: 'Photography', icon: '📸', color: '#607D8B', description: 'Photos, cameras, editing' },
+  { id: 'Comedy', name: 'Comedy', icon: '😂', color: '#FFC107', description: 'Humor, memes, entertainment' },
+  { id: 'Science', name: 'Science', icon: '🔬', color: '#00BCD4', description: 'Research, discoveries, facts' },
+  { id: 'Politics', name: 'Politics', icon: '🏛️', color: '#795548', description: 'News, debates, governance' },
+  { id: 'Business', name: 'Business', icon: '💼', color: '#455A64', description: 'Entrepreneurship, finance, career' },
+];
+
 const EditProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const { theme } = useTheme();
   const { user, updateUser } = useAuth();
@@ -39,11 +68,14 @@ const EditProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
   const [usernameLoading, setUsernameLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [avatarLoading, setAvatarLoading] = useState(false);
+  const [preferencesLoading, setPreferencesLoading] = useState(false);
   const [selectedAvatar, setSelectedAvatar] = useState<string | null>(null);
   const [avatarOptions, setAvatarOptions] = useState<AvatarOption[]>([]);
   const [isGeneratingAvatars, setIsGeneratingAvatars] = useState(false);
   const [showAvatarGrid, setShowAvatarGrid] = useState(false);
   const [showPasswordSection, setShowPasswordSection] = useState(false);
+  const [selectedPreferences, setSelectedPreferences] = useState<string[]>(user?.preferences || []);
+  const [showPreferencesSection, setShowPreferencesSection] = useState(false);
 
   const handleUpdateBio = async () => {
     if (bio === user?.bio) {
@@ -245,6 +277,55 @@ const EditProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
     }
   };
 
+  const handleUpdatePreferences = async () => {
+    if (selectedPreferences.length === 0) {
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Please select at least one preference',
+      });
+      return;
+    }
+
+    try {
+      setPreferencesLoading(true);
+      const response = await userAPI.updateProfile({ preferences: selectedPreferences });
+      if (response.success && response.user) {
+        await updateUser(response.user);
+        Toast.show({
+          type: 'success',
+          text1: 'Preferences updated successfully',
+        });
+        setShowPreferencesSection(false);
+      } else {
+        Toast.show({
+          type: 'error',
+          text1: 'Error',
+          text2: 'Failed to update preferences',
+        });
+      }
+    } catch (error: any) {
+      console.error('Preferences update error:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: error.response?.data?.message || 'Failed to update preferences',
+      });
+    } finally {
+      setPreferencesLoading(false);
+    }
+  };
+
+  const togglePreference = (categoryId: string) => {
+    setSelectedPreferences(prev => {
+      if (prev.includes(categoryId)) {
+        return prev.filter(id => id !== categoryId);
+      } else {
+        return [...prev, categoryId];
+      }
+    });
+  };
+
   const styles = StyleSheet.create({
     container: {
       flex: 1,
@@ -416,6 +497,43 @@ const EditProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
       color: theme.colors.textSecondary,
       fontSize: 14,
       marginVertical: 24,
+    },
+    preferenceGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'space-between',
+      marginBottom: 12,
+    },
+    preferenceItem: {
+      width: (width - 32 - 16) / 2,
+      marginBottom: 12,
+      backgroundColor: theme.colors.surface,
+      borderRadius: theme.borderRadius.lg,
+      padding: 12,
+      borderWidth: 2,
+      borderColor: 'transparent',
+    },
+    preferenceItemSelected: {
+      borderColor: theme.colors.primary,
+      backgroundColor: theme.colors.primary + '10',
+    },
+    preferenceIcon: {
+      fontSize: 28,
+      textAlign: 'center',
+      marginBottom: 8,
+    },
+    preferenceName: {
+      fontSize: 14,
+      fontWeight: '600',
+      color: theme.colors.text,
+      textAlign: 'center',
+      marginBottom: 4,
+    },
+    preferenceDescription: {
+      fontSize: 11,
+      color: theme.colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 14,
     },
   });
 
@@ -644,6 +762,51 @@ const EditProfileScreen: React.FC<{ navigation: any }> = ({ navigation }) => {
                 <ActivityIndicator color={theme.colors.textInverse} />
               ) : (
                 <Text style={styles.buttonText}>Update Password</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <TouchableOpacity
+          style={styles.secondaryButton}
+          onPress={() => setShowPreferencesSection(!showPreferencesSection)}
+          disabled={preferencesLoading}
+        >
+          <Text style={styles.secondaryButtonText}>
+            {showPreferencesSection ? 'Hide' : 'Edit'} Preferences ({selectedPreferences.length})
+          </Text>
+        </TouchableOpacity>
+
+        {showPreferencesSection && (
+          <View style={[styles.section, { marginTop: 16 }]}>
+            <Text style={styles.sectionTitle}>Select Your Interests</Text>
+            <Text style={styles.label}>Choose categories that interest you</Text>
+            <View style={styles.preferenceGrid}>
+              {categories.map((category) => (
+                <TouchableOpacity
+                  key={category.id}
+                  style={[
+                    styles.preferenceItem,
+                    selectedPreferences.includes(category.id) && styles.preferenceItemSelected,
+                  ]}
+                  onPress={() => togglePreference(category.id)}
+                  disabled={preferencesLoading}
+                >
+                  <Text style={styles.preferenceIcon}>{category.icon}</Text>
+                  <Text style={styles.preferenceName}>{category.name}</Text>
+                  <Text style={styles.preferenceDescription}>{category.description}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              style={styles.button}
+              onPress={handleUpdatePreferences}
+              disabled={preferencesLoading || selectedPreferences.length === 0}
+            >
+              {preferencesLoading ? (
+                <ActivityIndicator color={theme.colors.textInverse} />
+              ) : (
+                <Text style={styles.buttonText}>Update Preferences</Text>
               )}
             </TouchableOpacity>
           </View>

@@ -1,4 +1,4 @@
-require('dotenv').config({ path: require('path').resolve(__dirname, '.env') });
+require('dotenv').config({ path: require('path').resolve(__dirname, '..', '.env') });
 console.log("✅ MONGODB_URI present:", !!process.env.MONGODB_URI);
 
 const express = require('express');

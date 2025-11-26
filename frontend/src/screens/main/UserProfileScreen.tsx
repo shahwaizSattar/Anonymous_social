@@ -133,6 +133,16 @@ const UserProfileScreen: React.FC = () => {
           </View>
         </View>
       </View>
+      {isOwnProfile && (
+        <View style={styles.actionsRow}>
+          <TouchableOpacity 
+            onPress={() => (navigation as any).navigate('EditProfile')}
+            style={[styles.primaryButton, { backgroundColor: theme.colors.primary, flex: 1 }]}
+          >
+            <Text style={{ color: theme.colors.textInverse, fontWeight: '700' }}>Edit Profile</Text>
+          </TouchableOpacity>
+        </View>
+      )}
       {!isOwnProfile && (
         <View style={styles.actionsRow}>
           <TouchableOpacity disabled={followLoading} onPress={handleToggleFollow} style={[styles.primaryButton, { backgroundColor: isEchoing ? theme.colors.surface : theme.colors.primary, borderColor: theme.colors.primary, borderWidth: isEchoing ? 1 : 0 }]}> 
