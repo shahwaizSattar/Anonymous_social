@@ -11,7 +11,7 @@ const getBaseURL = () => {
   if (!__DEV__) return 'https://your-production-url.com/api';
 
   // Development defaults per platform
-  const YOUR_COMPUTER_IP = '192.168.10.3'; // Update to your LAN IP for real device testing
+  const YOUR_COMPUTER_IP = '192.168.10.13'; // Update to your LAN IP for real device testing
 
   if (Platform.OS === 'web') {
     return `http://localhost:5000/api`;
@@ -27,6 +27,15 @@ const getBaseURL = () => {
 };
 
 const BASE_URL = getBaseURL();
+
+const getSocketBaseURL = () => {
+  if (/\/api\/?$/.test(BASE_URL)) {
+    return BASE_URL.replace(/\/api\/?$/, '');
+  }
+  return BASE_URL;
+};
+
+export const SOCKET_BASE_URL = getSocketBaseURL();
 
 // Create axios instance
 export const api = axios.create({
@@ -204,6 +213,14 @@ export const userAPI = {
 
   getNotifications: async (): Promise<ApiResponse> => {
     const response: AxiosResponse<ApiResponse> = await api.get('/user/notifications');
+    return response.data;
+  },
+
+  markNotificationsRead: async (notificationIds?: string[]): Promise<ApiResponse> => {
+    const payload = Array.isArray(notificationIds) && notificationIds.length > 0
+      ? { notificationIds }
+      : {};
+    const response: AxiosResponse<ApiResponse> = await api.post('/user/notifications/read', payload);
     return response.data;
   },
 

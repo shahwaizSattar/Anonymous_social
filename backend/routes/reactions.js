@@ -1,6 +1,7 @@
 const express = require('express');
 const Post = require('../models/Post');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { authenticateToken } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 
@@ -55,6 +56,23 @@ router.post('/:postId', authenticateToken, [
       const author = await User.findById(post.author);
       if (author) {
         await author.addKarma(karmaPoints[reactionType]);
+
+        if (author.settings?.notifications?.reactions !== false) {
+          try {
+            await Notification.create({
+              user: post.author,
+              actor: userId,
+              type: 'reaction',
+              post: post._id,
+              reactionType,
+              metadata: {
+                postPreview: post.content?.text?.slice(0, 140) || ''
+              }
+            });
+          } catch (notifyError) {
+            console.error('Create reaction notification error:', notifyError);
+          }
+        }
       }
     }
 

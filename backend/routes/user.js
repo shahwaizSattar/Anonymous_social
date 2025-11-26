@@ -1,5 +1,6 @@
 const express = require('express');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { authenticateToken } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 
@@ -114,6 +115,21 @@ router.post('/echo/:userId', authenticateToken, async (req, res) => {
 
     // Add to following/followers
     await targetUser.addFollower(currentUserId);
+
+    if (targetUser.settings?.notifications?.followers !== false) {
+      try {
+        await Notification.create({
+          user: targetUser._id,
+          actor: currentUserId,
+          type: 'track',
+          metadata: {
+            username: targetUser.username
+          }
+        });
+      } catch (notifyError) {
+        console.error('Create track notification error:', notifyError);
+      }
+    }
 
     res.json({
       success: true,
@@ -423,31 +439,76 @@ router.put('/change-username', authenticateToken, [
 // GET /api/user/notifications - Get user notifications
 router.get('/notifications', authenticateToken, async (req, res) => {
   try {
-    const notifications = [
-      {
-        id: '1',
-        type: 'follower',
-        message: 'BlueTiger42 started echoing you',
-        timestamp: new Date(),
-        read: false
-      },
-      {
-        id: '2',
-        type: 'reaction',
-        message: 'Your post received 5 new reactions',
-        timestamp: new Date(Date.now() - 3600000),
-        read: false
-      }
-    ];
+    const [notifications, unreadCount] = await Promise.all([
+      Notification.find({ user: req.user._id })
+        .sort({ createdAt: -1 })
+        .limit(50)
+        .populate('actor', 'username avatar')
+        .populate('post', 'content')
+        .lean(),
+      Notification.countDocuments({ user: req.user._id, read: false })
+    ]);
+
+    const formattedNotifications = notifications.map(notification => ({
+      _id: notification._id,
+      type: notification.type,
+      read: notification.read,
+      createdAt: notification.createdAt,
+      user: notification.actor ? {
+        _id: notification.actor._id,
+        username: notification.actor.username,
+        avatar: notification.actor.avatar
+      } : undefined,
+      post: notification.post ? {
+        _id: notification.post._id,
+        content: {
+          text: notification.post.content?.text || ''
+        }
+      } : undefined,
+      comment: notification.metadata?.commentContent ? {
+        content: notification.metadata.commentContent
+      } : undefined,
+      reactionType: notification.reactionType
+    }));
 
     res.json({
       success: true,
-      notifications,
-      unreadCount: notifications.filter(n => !n.read).length
+      notifications: formattedNotifications,
+      unreadCount
     });
 
   } catch (error) {
     console.error('Get notifications error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// POST /api/user/notifications/read - Mark notifications as read
+router.post('/notifications/read', authenticateToken, async (req, res) => {
+  try {
+    const { notificationIds } = req.body || {};
+    const filter = { user: req.user._id, read: false };
+
+    if (Array.isArray(notificationIds) && notificationIds.length > 0) {
+      filter._id = { $in: notificationIds };
+    }
+
+    const result = await Notification.updateMany(filter, { $set: { read: true } });
+    const modifiedCount = typeof result.modifiedCount === 'number'
+      ? result.modifiedCount
+      : typeof result.nModified === 'number'
+      ? result.nModified
+      : 0;
+
+    res.json({
+      success: true,
+      updated: modifiedCount
+    });
+  } catch (error) {
+    console.error('Mark notifications read error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'

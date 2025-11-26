@@ -10,6 +10,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../../types/navigation';
 import { useAuth } from '../../context/AuthContext';
 import { userAPI } from '../../services/api';
 import Toast from 'react-native-toast-message';
@@ -33,7 +35,7 @@ interface Notification {
 const NotificationsScreen: React.FC = () => {
   const { theme } = useTheme();
   const { user } = useAuth();
-  const navigation = useNavigation();
+  const navigation = useNavigation<StackNavigationProp<RootStackParamList, 'Notifications'>>();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [filter, setFilter] = useState<'all' | 'unread'>('all');
 
@@ -124,13 +126,13 @@ const NotificationsScreen: React.FC = () => {
     
     // Navigate based on notification type
     if (notification.postId) {
-      navigation.navigate('PostDetail' as never, { postId: notification.postId } as never);
+      navigation.navigate('PostDetail', { postId: notification.postId });
     } else if (notification.groupId) {
       // Navigate to group
       console.log('Navigate to group:', notification.groupId);
     } else {
       // Navigate to user profile (UserProfile stack screen)
-      navigation.navigate('UserProfile' as never, { username: notification.user.username } as never);
+      navigation.navigate('UserProfile', { username: notification.user.username });
     }
   };
 

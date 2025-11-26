@@ -319,7 +319,6 @@ const ProfileScreen: React.FC = () => {
     { icon: '✏️', title: 'Edit Profile', onPress: () => navigation.navigate('EditProfile' as never) },
     { icon: '💬', title: 'Messages', onPress: () => navigation.navigate('Messages' as never) },
     { icon: '⚙️', title: 'Settings', onPress: () => navigation.navigate('Settings' as never) },
-    { icon: '🔔', title: 'Notifications', onPress: () => navigation.navigate('Notifications' as never) },
     { icon: '🎨', title: 'Themes', onPress: () => {} },
     { icon: '📊', title: 'Analytics', onPress: () => {} },
     { icon: '❓', title: 'Help & Support', onPress: () => {} },

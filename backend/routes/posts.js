@@ -2,6 +2,7 @@ const express = require('express');
 const Post = require('../models/Post');
 const WhisperPost = require('../models/WhisperPost');
 const User = require('../models/User');
+const Notification = require('../models/Notification');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 
@@ -462,6 +463,27 @@ router.post('/:postId/comments', authenticateToken, [
     // Populate the new comment
     await post.populate('comments.author', 'username avatar');
     const newComment = post.comments[post.comments.length - 1];
+
+    if (!post.author.equals(userId)) {
+      const postAuthor = await User.findById(post.author);
+
+      if (postAuthor?.settings?.notifications?.comments !== false) {
+        try {
+          await Notification.create({
+            user: post.author,
+            actor: userId,
+            type: 'comment',
+            post: post._id,
+            commentId: newComment._id,
+            metadata: {
+              commentContent: content.slice(0, 140)
+            }
+          });
+        } catch (notifyError) {
+          console.error('Create comment notification error:', notifyError);
+        }
+      }
+    }
 
     res.status(201).json({
       success: true,

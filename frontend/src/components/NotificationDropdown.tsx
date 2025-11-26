@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,9 @@ import {
   ScrollView,
   Image,
   Dimensions,
+  Modal,
 } from 'react-native';
+import { createAudioPlayer, type AudioPlayer } from 'expo-audio';
 import { useTheme } from '../context/ThemeContext';
 import { userAPI } from '../services/api';
 import { useNavigation } from '@react-navigation/native';
@@ -17,11 +19,12 @@ interface NotificationDropdownProps {
   visible: boolean;
   onClose: () => void;
   position: { x: number; y: number };
+  onNotificationsRead?: (clearedCount: number) => void;
 }
 
 interface Notification {
   _id: string;
-  type: 'reaction' | 'comment' | 'track' | 'follow' | 'mention';
+  type: 'reaction' | 'comment' | 'track' | 'follow' | 'mention' | 'message' | 'chat';
   read: boolean;
   createdAt: string;
   user?: {
@@ -41,37 +44,132 @@ interface Notification {
   reactionType?: string;
 }
 
+const notificationSound = require('../../assets/sounds/tudum.wav');
+const RELEVANT_NOTIFICATION_TYPES: Array<Notification['type']> = ['reaction', 'comment', 'track'];
+
 const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
   visible,
   onClose,
   position,
+  onNotificationsRead,
 }) => {
   const { theme } = useTheme();
   const navigation = useNavigation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
+  const playerRef = useRef<AudioPlayer | null>(null);
+  const hasInitializedRef = useRef(false);
+  const seenNotificationsRef = useRef(new Set<string>());
+  const hasMarkedReadRef = useRef(false);
+
+  const playNotificationSound = async () => {
+    try {
+      if (!playerRef.current) {
+        playerRef.current = createAudioPlayer(notificationSound);
+      } else {
+        playerRef.current.replace(notificationSound);
+      }
+      playerRef.current.seekTo(0);
+      playerRef.current.play();
+    } catch (error) {
+      console.error('Error playing notification sound:', error);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (playerRef.current) {
+        playerRef.current.remove();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (visible) {
+      hasMarkedReadRef.current = false;
       loadNotifications();
+    } else {
+      hasMarkedReadRef.current = false;
     }
   }, [visible]);
 
   const loadNotifications = async () => {
     try {
       setLoading(true);
-      const response = await userAPI.getNotifications();
-      const notifs = response.notifications || response.data || [];
+      const response: any = await userAPI.getNotifications();
+      const rawNotifications = Array.isArray(response?.notifications)
+        ? response.notifications
+        : Array.isArray(response?.data?.notifications)
+        ? response.data.notifications
+        : Array.isArray(response?.data)
+        ? response.data
+        : [];
       // Filter out message notifications
-      const filteredNotifs = notifs.filter((n: Notification) => 
+      const filteredNotifs = rawNotifications.filter((n: Notification) =>
         n.type !== 'message' && n.type !== 'chat'
       );
+
+      const newImportantNotifications = filteredNotifs.filter((notification: Notification) => 
+        RELEVANT_NOTIFICATION_TYPES.includes(notification.type) &&
+        !notification.read &&
+        !!notification._id &&
+        !seenNotificationsRef.current.has(notification._id)
+      );
+
+      filteredNotifs.forEach((notification: Notification) => {
+        if (notification._id) {
+          seenNotificationsRef.current.add(notification._id);
+        }
+      });
+
+      if (hasInitializedRef.current && newImportantNotifications.length > 0) {
+        await playNotificationSound();
+      }
+
+      if (!hasInitializedRef.current) {
+        hasInitializedRef.current = true;
+      }
+
       setNotifications(filteredNotifs);
+      await markNotificationsAsRead(filteredNotifs);
     } catch (error) {
       console.error('Error loading notifications:', error);
       setNotifications([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const markNotificationsAsRead = async (incomingNotifications: Notification[]) => {
+    if (hasMarkedReadRef.current) {
+      return;
+    }
+
+    const unreadIds = incomingNotifications
+      .filter((notification) => !notification.read && notification._id)
+      .map((notification) => notification._id);
+
+    if (unreadIds.length === 0) {
+      hasMarkedReadRef.current = true;
+      onNotificationsRead?.(0);
+      return;
+    }
+
+    try {
+      await userAPI.markNotificationsRead(unreadIds);
+      const unreadSet = new Set(unreadIds);
+      setNotifications((prev) =>
+        prev.map((notification) =>
+          unreadSet.has(notification._id)
+            ? { ...notification, read: true }
+            : notification
+        )
+      );
+      hasMarkedReadRef.current = true;
+      onNotificationsRead?.(unreadIds.length);
+    } catch (error) {
+      console.error('Mark notifications read error:', error);
+      hasMarkedReadRef.current = false;
     }
   };
 
@@ -139,11 +237,25 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
   };
 
   const screenWidth = Dimensions.get('window').width;
-  const dropdownWidth = Math.min(350, screenWidth - 40);
-  // Position dropdown below the bell, aligned to the right
-  const dropdownLeft = Math.max(10, screenWidth - dropdownWidth - 20);
+  const screenHeight = Dimensions.get('window').height;
+  const dropdownWidth = Math.min(350, screenWidth - 32);
+  const maxDropdownHeight = 400;
+  const horizontalPadding = 16;
+  const verticalPadding = 16;
+  const dropdownLeft = Math.min(
+    Math.max(position.x - dropdownWidth / 2, horizontalPadding),
+    screenWidth - dropdownWidth - horizontalPadding
+  );
+  const dropdownTop = Math.min(
+    Math.max(position.y + 10, verticalPadding + 30),
+    screenHeight - maxDropdownHeight - verticalPadding
+  );
 
   const styles = StyleSheet.create({
+    modalContainer: {
+      flex: 1,
+      position: 'relative',
+    },
     overlay: {
       position: 'absolute',
       top: 0,
@@ -151,13 +263,12 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
       right: 0,
       bottom: 0,
       zIndex: 1000,
+      backgroundColor: 'transparent',
     },
     dropdown: {
       position: 'absolute',
-      top: position.y + 40,
-      left: dropdownLeft,
       width: dropdownWidth,
-      maxHeight: 400,
+      maxHeight: maxDropdownHeight,
       backgroundColor: theme.colors.surface,
       borderRadius: 12,
       ...theme.shadows.large,
@@ -260,68 +371,72 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
   if (!visible) return null;
 
   return (
-    <>
-      <TouchableOpacity
-        style={styles.overlay}
-        activeOpacity={1}
-        onPress={onClose}
-      />
-      <View style={styles.dropdown}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Notifications</Text>
-          <TouchableOpacity style={styles.closeButton} onPress={onClose}>
-            <Text style={styles.closeText}>✕</Text>
-          </TouchableOpacity>
-        </View>
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-          {loading ? (
-            <View style={styles.loadingContainer}>
-              <Text style={styles.loadingText}>Loading...</Text>
-            </View>
-          ) : notifications.length === 0 ? (
-            <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No notifications yet</Text>
-            </View>
-          ) : (
-            notifications.map((notification) => (
-              <TouchableOpacity
-                key={notification._id}
-                style={[
-                  styles.notificationItem,
-                  !notification.read && styles.unreadNotification,
-                ]}
-                onPress={() => handleNotificationPress(notification)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.iconContainer}>
-                  <Text style={{ fontSize: 18 }}>{getNotificationIcon(notification.type)}</Text>
-                </View>
-                {notification.user?.avatar ? (
-                  <Image
-                    source={{ uri: convertAvatarUrl(notification.user.avatar) || '' }}
-                    style={styles.avatar}
-                  />
-                ) : (
-                  <View style={styles.avatarContainer}>
-                    <Text style={styles.avatarText}>
-                      {notification.user?.username?.charAt(0).toUpperCase() || '?'}
+    <Modal transparent visible={visible} animationType="fade" onRequestClose={onClose}>
+      <View style={styles.modalContainer} pointerEvents="box-none">
+        <TouchableOpacity
+          style={styles.overlay}
+          activeOpacity={1}
+          onPress={onClose}
+        />
+        <View style={[styles.dropdown, { top: dropdownTop, left: dropdownLeft }]}
+          pointerEvents="box-none"
+        >
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Notifications</Text>
+            <TouchableOpacity style={styles.closeButton} onPress={onClose}>
+              <Text style={styles.closeText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+          <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+            {loading ? (
+              <View style={styles.loadingContainer}>
+                <Text style={styles.loadingText}>Loading...</Text>
+              </View>
+            ) : notifications.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No notifications yet</Text>
+              </View>
+            ) : (
+              notifications.map((notification) => (
+                <TouchableOpacity
+                  key={notification._id}
+                  style={[
+                    styles.notificationItem,
+                    !notification.read && styles.unreadNotification,
+                  ]}
+                  onPress={() => handleNotificationPress(notification)}
+                  activeOpacity={0.7}
+                >
+                  <View style={styles.iconContainer}>
+                    <Text style={{ fontSize: 18 }}>{getNotificationIcon(notification.type)}</Text>
+                  </View>
+                  {notification.user?.avatar ? (
+                    <Image
+                      source={{ uri: convertAvatarUrl(notification.user.avatar) || '' }}
+                      style={styles.avatar}
+                    />
+                  ) : (
+                    <View style={styles.avatarContainer}>
+                      <Text style={styles.avatarText}>
+                        {notification.user?.username?.charAt(0).toUpperCase() || '?'}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.notificationContent}>
+                    <Text style={styles.notificationText}>
+                      {getNotificationText(notification)}
+                    </Text>
+                    <Text style={styles.notificationTime}>
+                      {formatTime(notification.createdAt)}
                     </Text>
                   </View>
-                )}
-                <View style={styles.notificationContent}>
-                  <Text style={styles.notificationText}>
-                    {getNotificationText(notification)}
-                  </Text>
-                  <Text style={styles.notificationTime}>
-                    {formatTime(notification.createdAt)}
-                  </Text>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
+        </View>
       </View>
-    </>
+    </Modal>
   );
 };
 

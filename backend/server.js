@@ -20,6 +20,8 @@ const io = socketIo(server, {
   }
 });
 
+global.io = io;
+
 // Routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/user');
