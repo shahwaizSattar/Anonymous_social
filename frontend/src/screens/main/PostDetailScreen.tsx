@@ -10,8 +10,10 @@ import {
   Image,
   ImageResizeMode,
   StatusBar,
+  Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Video, ResizeMode, Audio } from 'expo-av';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { postsAPI } from '../../services/api';
@@ -21,7 +23,7 @@ import { RootStackParamList } from '../../types/navigation';
 import Toast from 'react-native-toast-message';
 import { convertAvatarUrl } from '../../utils/imageUtils';
 import { censorText } from '../../utils/censorUtils';
-// import { VideoView } from 'expo-video';
+import { formatTimeAgo } from '../../utils/timeUtils';
 
 type PostDetailScreenRouteProp = RouteProp<RootStackParamList, 'PostDetail'>;
 
@@ -67,6 +69,11 @@ interface Post {
       url: string;
       mimetype: string;
     }>;
+    voiceNote?: {
+      url: string;
+      effect?: string;
+      duration?: number;
+    };
   };
   category: string;
   createdAt: string;
@@ -88,6 +95,10 @@ interface Post {
     total: number;
   };
   userReaction?: Reaction;
+  interactions?: {
+    commentsLocked?: boolean;
+    reactionsLocked?: boolean;
+  };
   comments: Array<ListItem & {
     type: 'comment';
     _id: string;
@@ -112,6 +123,8 @@ const PostDetailScreen = () => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<ListItem[]>([]);
+  const [voiceSound, setVoiceSound] = useState<Audio.Sound | null>(null);
+  const [isVoicePlaying, setIsVoicePlaying] = useState(false);
 
   const styles = StyleSheet.create({
     container: {
@@ -326,6 +339,65 @@ const PostDetailScreen = () => {
       fontWeight: '600',
       fontSize: 15,
     },
+    voiceNoteContainer: {
+      marginVertical: 15,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'hidden',
+    },
+    voiceNoteButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+    },
+    playButtonCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    playButtonIcon: {
+      color: '#000',
+      fontSize: 16,
+      marginLeft: 2,
+    },
+    voiceWaveformContainer: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    waveformBars: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 24,
+      gap: 2,
+      marginBottom: 4,
+    },
+    waveformBar: {
+      width: 2.5,
+      borderRadius: 2,
+      opacity: 0.8,
+    },
+    voiceNoteFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    voiceNoteDuration: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: theme.colors.textSecondary,
+    },
+    voiceNoteEffect: {
+      fontSize: 11,
+      color: theme.colors.primary,
+      textTransform: 'capitalize',
+      fontWeight: '500',
+    },
   });
 
   const fetchPost = async () => {
@@ -352,7 +424,7 @@ const PostDetailScreen = () => {
       // Some APIs might return: { success: true, data: {...} }
       let postData = null;
       if (response.success) {
-        postData = response.post || response.data;
+        postData = (response as any).post || response.data;
       }
       
       if (postData) {
@@ -397,6 +469,16 @@ const PostDetailScreen = () => {
     try {
       if (!post) return;
       
+      // Check if reactions are locked
+      if (post.interactions?.reactionsLocked) {
+        Toast.show({
+          type: 'error',
+          text1: 'Reactions Locked',
+          text2: 'Reactions are locked on this post',
+        });
+        return;
+      }
+      
       let response;
       if (post.userReaction === reactionType) {
         response = await reactionsAPI.removeReaction(postId);
@@ -415,29 +497,41 @@ const PostDetailScreen = () => {
       console.log('Reaction response:', response);
       
       if (response.success && response.reactions) {
-        setPost(prevPost => 
-          prevPost ? {
+        setPost(prevPost => {
+          if (!prevPost) return null;
+          return {
             ...prevPost,
-            reactionCounts: response.reactions,
-            userReaction: response.userReaction || null
-          } : null
-        );
+            reactionCounts: response.reactions || prevPost.reactionCounts,
+            userReaction: (response.userReaction as Reaction) || undefined
+          };
+        });
       } else {
         console.error('Invalid response format:', response);
         fetchPost();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error handling reaction:', error);
+      const errorMessage = error?.response?.data?.message || 'Failed to update reaction';
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to update reaction',
+        text2: errorMessage,
       });
     }
   };
 
   const handleComment = async () => {
     if (!comment.trim()) return;
+
+    // Check if comments are locked
+    if (post?.interactions?.commentsLocked) {
+      Toast.show({
+        type: 'error',
+        text1: 'Comments Locked',
+        text2: 'Comments are locked on this post',
+      });
+      return;
+    }
 
     try {
       const response = await postsAPI.addComment(postId, comment);
@@ -449,18 +543,143 @@ const PostDetailScreen = () => {
         });
         fetchPost();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error adding comment:', error);
+      const errorMessage = error?.response?.data?.message || 'Failed to add comment';
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to add comment',
+        text2: errorMessage,
       });
     }
   };
 
-  const renderMedia = (media: Array<{url: string, mimetype: string}> | undefined) => {
+  const getVoiceEffectSettings = (effect?: string) => {
+    // Apply pitch and rate modifications for different voice effects
+    switch (effect) {
+      case 'deep':
+        return { rate: 0.8, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'soft':
+        return { rate: 0.9, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'robot':
+        return { rate: 1.0, pitchCorrectionQuality: Audio.PitchCorrectionQuality.Low };
+      case 'glitchy':
+        return { rate: 1.2, pitchCorrectionQuality: Audio.PitchCorrectionQuality.Low };
+      case 'girly':
+        return { rate: 1.15, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'boyish':
+        return { rate: 0.85, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      default:
+        return { rate: 1.0, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+    }
+  };
+
+  const playVoiceNote = async (voiceUrl: string, effect?: string) => {
+    try {
+      if (isVoicePlaying && voiceSound) {
+        await voiceSound.pauseAsync();
+        setIsVoicePlaying(false);
+        return;
+      }
+
+      if (voiceSound) {
+        const status = await voiceSound.getStatusAsync();
+        if (status.isLoaded) {
+          if (status.didJustFinish || (status.durationMillis && status.positionMillis >= status.durationMillis)) {
+            await voiceSound.replayAsync();
+          } else {
+            await voiceSound.playAsync();
+          }
+          setIsVoicePlaying(true);
+        }
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      const playbackSettings = getVoiceEffectSettings(effect);
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: voiceUrl },
+        { 
+          shouldPlay: true,
+          ...playbackSettings
+        },
+        (status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setIsVoicePlaying(false);
+          }
+        }
+      );
+
+      setVoiceSound(sound);
+      setIsVoicePlaying(true);
+    } catch (error) {
+      console.error('Error playing voice note:', error);
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to play voice note' });
+    }
+  };
+
+  const formatVoiceDuration = (seconds: number): string => {
+    if (seconds < 60) {
+      return `0:${seconds.toString().padStart(2, '0')}`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const renderVoiceNote = (voiceNote: { url: string; effect?: string; duration?: number }) => {
+    const duration = voiceNote.duration || 0;
+
+    return (
+      <View style={styles.voiceNoteContainer}>
+        <TouchableOpacity
+          style={styles.voiceNoteButton}
+          onPress={() => playVoiceNote(voiceNote.url, voiceNote.effect)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.playButtonCircle}>
+            <Text style={styles.playButtonIcon}>{isVoicePlaying ? '⏸' : '▶'}</Text>
+          </View>
+          
+          <View style={styles.voiceWaveformContainer}>
+            <View style={styles.waveformBars}>
+              {[...Array(25)].map((_, i) => (
+                <View 
+                  key={i} 
+                  style={[
+                    styles.waveformBar,
+                    { 
+                      height: Math.random() * 16 + 8,
+                      backgroundColor: isVoicePlaying ? '#00D4AA' : '#555'
+                    }
+                  ]} 
+                />
+              ))}
+            </View>
+            <View style={styles.voiceNoteFooter}>
+              <Text style={styles.voiceNoteDuration}>
+                {duration > 0 ? formatVoiceDuration(duration) : '0:00'}
+              </Text>
+              {voiceNote.effect && voiceNote.effect !== 'none' && (
+                <Text style={styles.voiceNoteEffect}>• {voiceNote.effect}</Text>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderMedia = (media: Array<{url: string, mimetype?: string, type?: string}> | undefined) => {
     if (!media || media.length === 0) return null;
+
+    const screenWidth = Dimensions.get('window').width - 70; // Account for padding
+    const mediaHeight = screenWidth * 0.75;
 
     return (
       <View style={styles.mediaContainer}>
@@ -469,45 +688,80 @@ const PostDetailScreen = () => {
           horizontal
           showsHorizontalScrollIndicator={false}
           keyExtractor={(item, index) => index.toString()}
-          renderItem={({ item }) => (
-            <View style={styles.mediaItem}>
-              {item.mimetype?.startsWith('video/') ? (
-                <View style={[styles.mediaContent, { backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
-                  <Text style={{ color: '#fff' }}>Video: {item.url}</Text>
-                </View>
-              ) : (
-                <Image
-                  source={{ uri: item.url }}
-                  style={styles.mediaContent}
-                  resizeMode="cover"
+          renderItem={({ item }) => {
+            const isVideo = item.type === 'video' || item.mimetype?.startsWith('video/');
+            
+            return (
+              <View style={styles.mediaItem}>
+                {isVideo ? (
+                  <Video
+                    source={{ uri: item.url }}
+                    style={[styles.mediaContent, { width: screenWidth, height: mediaHeight }]}
+                    useNativeControls
+                    resizeMode={ResizeMode.CONTAIN}
+                    isLooping={false}
+                    onError={(error) => console.log('❌ Video load error:', error, 'URL:', item.url)}
+                    onLoad={() => console.log('✅ Video loaded successfully:', item.url)}
                   />
-              )}
-            </View>
-          )}
+                ) : (
+                  <Image
+                    source={{ uri: item.url }}
+                    style={[styles.mediaContent, { width: screenWidth, height: mediaHeight }]}
+                    resizeMode="cover"
+                  />
+                )}
+              </View>
+            );
+          }}
         />
       </View>
     );
   };
 
-  const ReactionBar = () => (
-    <View style={styles.reactionBar}>
-      {Object.entries(REACTION_ICONS).map(([type, emoji]) => (
-        <TouchableOpacity
-          key={type}
-          onPress={() => handleReaction(type as Reaction)}
-          style={[
-            styles.reactionButton,
-            post?.userReaction === type && styles.activeReaction,
-          ]}
-        >
-          <Text style={styles.reactionEmoji}>{emoji}</Text>
-          <Text style={styles.reactionCount}>
-            {post?.reactionCounts?.[type as keyof typeof post.reactionCounts] || 0}
+  const ReactionBar = () => {
+    if (!post) return null;
+    
+    const reactionsLocked = post.interactions?.reactionsLocked;
+    
+    return (
+      <View>
+        <View style={styles.reactionBar}>
+          {Object.entries(REACTION_ICONS).map(([type, emoji]) => (
+            <TouchableOpacity
+              key={type}
+              onPress={() => {
+                if (reactionsLocked) {
+                  Toast.show({
+                    type: 'error',
+                    text1: 'Reactions Locked',
+                    text2: 'Reactions are locked on this post',
+                  });
+                  return;
+                }
+                handleReaction(type as Reaction);
+              }}
+              disabled={reactionsLocked}
+              style={[
+                styles.reactionButton,
+                post.userReaction === type && styles.activeReaction,
+                reactionsLocked && { opacity: 0.4 },
+              ]}
+            >
+              <Text style={styles.reactionEmoji}>{emoji}</Text>
+              <Text style={styles.reactionCount}>
+                {post.reactionCounts?.[type as keyof typeof post.reactionCounts] || 0}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        {reactionsLocked && (
+          <Text style={{ fontSize: 12, color: theme.colors.error, marginTop: 8, textAlign: 'center' }}>
+            🔒 Reactions are locked on this post
           </Text>
-        </TouchableOpacity>
-      ))}
-    </View>
-  );
+        )}
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -586,37 +840,42 @@ const PostDetailScreen = () => {
         keyExtractor={(item) => `comment-${item._id}`}
         refreshing={refreshing}
         onRefresh={fetchPost}
-        ListHeaderComponent={() => (
-          <View style={styles.postContainer}>
-            <View style={styles.postHeader}>
-              <View style={styles.authorInfo}>
-                {post.author.avatar ? (
-                  <Image source={{ uri: convertAvatarUrl(post.author.avatar) || '' }} style={styles.avatar} />
-                ) : (
-                  <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
-                    <Text style={styles.avatarText}>
-                      {post.author.username.charAt(0).toUpperCase()}
-                    </Text>
-                  </View>
-                )}
-                <Text style={[styles.username, { color: theme.colors.text }]}>
-                  {post.author.username}
+        ListHeaderComponent={() => {
+          if (!post) return null;
+          
+          return (
+            <View style={styles.postContainer}>
+              <View style={styles.postHeader}>
+                <View style={styles.authorInfo}>
+                  {post.author.avatar ? (
+                    <Image source={{ uri: convertAvatarUrl(post.author.avatar) || '' }} style={styles.avatar} />
+                  ) : (
+                    <View style={[styles.avatarPlaceholder, { backgroundColor: theme.colors.primary }]}>
+                      <Text style={styles.avatarText}>
+                        {post.author.username.charAt(0).toUpperCase()}
+                      </Text>
+                    </View>
+                  )}
+                  <Text style={[styles.username, { color: theme.colors.text }]}>
+                    {post.author.username}
+                  </Text>
+                </View>
+                <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
+                  {formatTimeAgo(post.createdAt)}
                 </Text>
               </View>
-              <Text style={[styles.timestamp, { color: theme.colors.textSecondary }]}>
-                {new Date(post.createdAt).toLocaleDateString()}
+              <Text style={[styles.postCategory, { color: theme.colors.primary }]}>
+                #{post.category}
               </Text>
+              <Text style={[styles.postContent, { color: theme.colors.text }]}>
+                {censorText(post.content.text)}
+              </Text>
+              {post.content?.voiceNote?.url && renderVoiceNote(post.content.voiceNote)}
+              {renderMedia(post.content.media)}
+              <ReactionBar />
             </View>
-            <Text style={[styles.postCategory, { color: theme.colors.primary }]}>
-              #{post.category}
-            </Text>
-            <Text style={[styles.postContent, { color: theme.colors.text }]}>
-              {censorText(post.content.text)}
-            </Text>
-            {renderMedia(post.content.media)}
-            <ReactionBar />
-          </View>
-        )}
+          );
+        }}
         renderItem={({ item }: { item: CommentItem }) => (
           <View style={styles.commentContainer}>
             <View style={styles.commentHeader}>
@@ -641,28 +900,61 @@ const PostDetailScreen = () => {
             </Text>
           </View>
         )}
-        ListFooterComponent={() => (
-          <View style={styles.commentInputContainer}>
-            <TextInput
-              style={[styles.commentInput, {
-                color: theme.colors.text,
-                borderColor: theme.colors.border,
-                backgroundColor: theme.colors.surface,
-              }]}
-              value={comment}
-              onChangeText={setComment}
-              placeholder="Add a comment..."
-              placeholderTextColor={theme.colors.textSecondary}
-              multiline
-            />
-            <TouchableOpacity
-              style={[styles.commentButton, { backgroundColor: theme.colors.primary }]}
-              onPress={handleComment}
-            >
-              <Text style={styles.commentButtonText}>Post</Text>
-            </TouchableOpacity>
-          </View>
-        )}
+        ListFooterComponent={() => {
+          const commentsLocked = post?.interactions?.commentsLocked;
+          
+          return (
+            <View>
+              <View style={[styles.commentInputContainer, commentsLocked && { opacity: 0.4 }]}>
+                <TextInput
+                  style={[styles.commentInput, {
+                    color: theme.colors.text,
+                    borderColor: theme.colors.border,
+                    backgroundColor: theme.colors.surface,
+                  }]}
+                  value={comment}
+                  onChangeText={setComment}
+                  placeholder={commentsLocked ? "Comments are locked" : "Add a comment..."}
+                  placeholderTextColor={theme.colors.textSecondary}
+                  multiline
+                  editable={!commentsLocked}
+                />
+                <TouchableOpacity
+                  style={[
+                    styles.commentButton, 
+                    { backgroundColor: theme.colors.primary },
+                    commentsLocked && { opacity: 0.4 }
+                  ]}
+                  onPress={() => {
+                    if (commentsLocked) {
+                      Toast.show({
+                        type: 'error',
+                        text1: 'Comments Locked',
+                        text2: 'Comments are locked on this post',
+                      });
+                      return;
+                    }
+                    handleComment();
+                  }}
+                  disabled={commentsLocked}
+                >
+                  <Text style={styles.commentButtonText}>Post</Text>
+                </TouchableOpacity>
+              </View>
+              {commentsLocked && (
+                <Text style={{ 
+                  fontSize: 12, 
+                  color: theme.colors.error, 
+                  textAlign: 'center',
+                  marginTop: 8,
+                  marginBottom: 16,
+                }}>
+                  🔒 Comments are locked on this post
+                </Text>
+              )}
+            </View>
+          );
+        }}
       />
     </SafeAreaView>
   );

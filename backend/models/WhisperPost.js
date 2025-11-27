@@ -56,6 +56,11 @@ const whisperPostSchema = new mongoose.Schema({
       }
     }]
   },
+  backgroundAnimation: {
+    type: String,
+    enum: ['none', 'rain', 'neon', 'fire', 'snow', 'hearts', 'mist'],
+    default: 'none'
+  },
   category: {
     type: String,
     required: true,

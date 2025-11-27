@@ -1,21 +1,32 @@
 const express = require('express');
 const WhisperPost = require('../models/WhisperPost');
-const { generateSessionId } = require('../middleware/auth');
+const { optionalAuth } = require('../middleware/auth');
 const { body, validationResult } = require('express-validator');
 
 const router = express.Router();
 
-// POST /api/whisperwall - Create anonymous post
-router.post('/', generateSessionId, [
-  body('content.media').optional().isArray(),
+// Helper to get or create session ID
+const getSessionId = (req) => {
+  if (!req.session.whisperSessionId) {
+    req.session.whisperSessionId = require('crypto').randomBytes(16).toString('hex');
+  }
+  return req.session.whisperSessionId;
+};
+
+// POST /api/whisperwall - Create anonymous whisper
+router.post('/', optionalAuth, [
+  body('content.text').optional().isLength({ max: 500 }),
   body('category').notEmpty().isIn(['Gaming', 'Education', 'Beauty', 'Fitness', 'Music', 'Technology', 
     'Art', 'Food', 'Travel', 'Sports', 'Movies', 'Books', 'Fashion',
     'Photography', 'Comedy', 'Science', 'Politics', 'Business', 'Vent', 
     'Confession', 'Advice', 'Random'])
 ], async (req, res) => {
   try {
+    console.log('📥 Creating whisper:', req.body);
+    
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
+      console.log('❌ Validation errors:', errors.array());
       return res.status(400).json({
         success: false,
         message: 'Validation failed',
@@ -23,57 +34,47 @@ router.post('/', generateSessionId, [
       });
     }
 
-    const { content, category, tags, location } = req.body;
+    const { content, category, tags, backgroundAnimation } = req.body;
 
-    // Validate text length if provided
-    if (content.text && content.text.length > 2000) {
+    if (!content.text?.trim() && (!content.media || content.media.length === 0)) {
+      console.log('❌ No content provided');
       return res.status(400).json({
         success: false,
-        message: 'Text content must be 2000 characters or less'
+        message: 'Whisper must have either text or media'
       });
     }
-
-    // Validate that post has either text or media
-    const hasText = content.text && content.text.trim().length > 0;
-    const hasMedia = content.media && Array.isArray(content.media) && content.media.length > 0;
-    
-    if (!hasText && !hasMedia) {
-      return res.status(400).json({
-        success: false,
-        message: 'Post must have either text content or media'
-      });
-    }
-
-    console.log('👻 Creating WhisperWall post with content:', JSON.stringify(content, null, 2)); // Debug log
 
     const whisperPost = new WhisperPost({
       content,
       category,
       tags: tags || [],
-      location: location || null
+      backgroundAnimation: backgroundAnimation || 'none',
+      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24 hours
     });
 
     await whisperPost.save();
-    console.log('✅ WhisperWall post saved with ID:', whisperPost._id); // Debug log
+    console.log('✅ Whisper created:', whisperPost._id);
 
     res.status(201).json({
       success: true,
       message: 'Whisper posted successfully',
-      post: whisperPost
+      whisper: whisperPost
     });
 
   } catch (error) {
-    console.error('Create whisper post error:', error);
+    console.error('❌ Create whisper error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Server error',
+      error: error.message
     });
   }
 });
 
-// GET /api/whisperwall - Get WhisperWall posts
-router.get('/', generateSessionId, async (req, res) => {
+// GET /api/whisperwall - Get all whispers
+router.get('/', optionalAuth, async (req, res) => {
   try {
+    console.log('📥 Getting whispers...');
     const { page = 1, limit = 20, category, filter = 'recent' } = req.query;
     const skip = (page - 1) * limit;
 
@@ -98,81 +99,54 @@ router.get('/', generateSessionId, async (req, res) => {
         sortCriteria = { createdAt: -1 };
     }
 
-    const posts = await WhisperPost.find(matchCriteria)
+    const whispers = await WhisperPost.find(matchCriteria)
       .sort(sortCriteria)
       .skip(skip)
       .limit(parseInt(limit));
 
-    console.log('👻 Retrieved WhisperWall posts:', posts.length); // Debug log
-    posts.forEach((post, index) => {
-      console.log(`👻 WhisperWall Post ${index + 1}:`, {
-        id: post._id,
-        text: post.content?.text,
-        mediaCount: post.content?.media?.length || 0,
-        media: post.content?.media,
-        expiresAt: post.expiresAt
-      }); // Debug log
-    });
-
-    // Add user reaction info based on session
-    const postsWithSessionReactions = posts.map(post => {
-      const userReaction = post.reactedUsers.find(r => r.sessionId === req.sessionId);
-      return {
-        ...post.toObject(),
-        userReaction: userReaction ? userReaction.reactionType : null,
-        userHasReacted: !!userReaction,
-        sessionId: req.sessionId // For debugging
-      };
-    });
+    console.log(`✅ Found ${whispers.length} whispers`);
 
     res.json({
       success: true,
-      posts: postsWithSessionReactions,
+      whispers,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        hasMore: posts.length === parseInt(limit)
-      },
-      sessionId: req.sessionId
+        hasMore: whispers.length === parseInt(limit)
+      }
     });
 
   } catch (error) {
-    console.error('Get whisper posts error:', error);
+    console.error('❌ Get whispers error:', error);
     res.status(500).json({
       success: false,
-      message: 'Server error'
+      message: 'Server error',
+      error: error.message
     });
   }
 });
 
-// GET /api/whisperwall/:postId - Get single whisper post
-router.get('/:postId', generateSessionId, async (req, res) => {
+// GET /api/whisperwall/:postId - Get single whisper
+router.get('/:postId', optionalAuth, async (req, res) => {
   try {
     const { postId } = req.params;
 
-    const post = await WhisperPost.findById(postId);
-    if (!post) {
+    const whisper = await WhisperPost.findById(postId);
+
+    if (!whisper) {
       return res.status(404).json({
         success: false,
-        message: 'Whisper post not found'
+        message: 'Whisper not found'
       });
     }
 
-    // Add user reaction info
-    const userReaction = post.reactedUsers.find(r => r.sessionId === req.sessionId);
-    const postData = {
-      ...post.toObject(),
-      userReaction: userReaction ? userReaction.reactionType : null,
-      userHasReacted: !!userReaction
-    };
-
     res.json({
       success: true,
-      post: postData
+      whisper
     });
 
   } catch (error) {
-    console.error('Get whisper post error:', error);
+    console.error('Get whisper error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -180,41 +154,42 @@ router.get('/:postId', generateSessionId, async (req, res) => {
   }
 });
 
-// POST /api/whisperwall/:postId/react - Add anonymous reaction
-router.post('/:postId/react', generateSessionId, [
-  body('reactionType').isIn(['funny', 'rage', 'shock', 'relatable', 'love', 'thinking'])
+// POST /api/whisperwall/:postId/react - React to whisper
+router.post('/:postId/react', optionalAuth, [
+  body('reactionType').notEmpty().isIn(['funny', 'rage', 'shock', 'relatable', 'love', 'thinking'])
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({
         success: false,
-        message: 'Invalid reaction type'
+        message: 'Validation failed',
+        errors: errors.array()
       });
     }
 
     const { postId } = req.params;
     const { reactionType } = req.body;
+    const sessionId = getSessionId(req);
 
-    const post = await WhisperPost.findById(postId);
-    if (!post) {
+    const whisper = await WhisperPost.findById(postId);
+    if (!whisper) {
       return res.status(404).json({
         success: false,
-        message: 'Whisper post not found'
+        message: 'Whisper not found'
       });
     }
 
-    await post.addAnonymousReaction(req.sessionId, reactionType);
+    await whisper.addAnonymousReaction(sessionId, reactionType);
 
     res.json({
       success: true,
       message: 'Reaction added',
-      reactions: post.reactions,
-      userReaction: reactionType
+      reactions: whisper.reactions
     });
 
   } catch (error) {
-    console.error('Add whisper reaction error:', error);
+    console.error('React to whisper error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -222,26 +197,26 @@ router.post('/:postId/react', generateSessionId, [
   }
 });
 
-// DELETE /api/whisperwall/:postId/react - Remove anonymous reaction
-router.delete('/:postId/react', generateSessionId, async (req, res) => {
+// DELETE /api/whisperwall/:postId/react - Remove reaction
+router.delete('/:postId/react', optionalAuth, async (req, res) => {
   try {
     const { postId } = req.params;
+    const sessionId = getSessionId(req);
 
-    const post = await WhisperPost.findById(postId);
-    if (!post) {
+    const whisper = await WhisperPost.findById(postId);
+    if (!whisper) {
       return res.status(404).json({
         success: false,
-        message: 'Whisper post not found'
+        message: 'Whisper not found'
       });
     }
 
-    await post.removeAnonymousReaction(req.sessionId);
+    await whisper.removeAnonymousReaction(sessionId);
 
     res.json({
       success: true,
       message: 'Reaction removed',
-      reactions: post.reactions,
-      userReaction: null
+      reactions: whisper.reactions
     });
 
   } catch (error) {
@@ -253,8 +228,8 @@ router.delete('/:postId/react', generateSessionId, async (req, res) => {
   }
 });
 
-// POST /api/whisperwall/:postId/comments - Add anonymous comment
-router.post('/:postId/comments', generateSessionId, [
+// POST /api/whisperwall/:postId/comments - Add comment
+router.post('/:postId/comments', optionalAuth, [
   body('content').notEmpty().isLength({ max: 500 })
 ], async (req, res) => {
   try {
@@ -269,22 +244,22 @@ router.post('/:postId/comments', generateSessionId, [
 
     const { postId } = req.params;
     const { content } = req.body;
+    const sessionId = getSessionId(req);
 
-    const post = await WhisperPost.findById(postId);
-    if (!post) {
+    const whisper = await WhisperPost.findById(postId);
+    if (!whisper) {
       return res.status(404).json({
         success: false,
-        message: 'Whisper post not found'
+        message: 'Whisper not found'
       });
     }
 
-    await post.addAnonymousComment(content, req.sessionId);
-    const newComment = post.comments[post.comments.length - 1];
+    await whisper.addAnonymousComment(content, sessionId);
 
     res.status(201).json({
       success: true,
-      message: 'Anonymous comment added',
-      comment: newComment
+      message: 'Comment added',
+      comment: whisper.comments[whisper.comments.length - 1]
     });
 
   } catch (error) {
@@ -296,83 +271,30 @@ router.post('/:postId/comments', generateSessionId, [
   }
 });
 
-// POST /api/whisperwall/whisper-chain - Create or forward a whisper chain
-router.post('/whisper-chain', generateSessionId, [
-  body('message').notEmpty().isLength({ max: 500 }),
-  body('isForwarding').optional().isBoolean()
-], async (req, res) => {
+// GET /api/whisperwall/daily-challenge - Get daily challenge
+router.get('/daily-challenge', optionalAuth, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
-      });
-    }
+    const challenges = [
+      "What's something you regret not doing?",
+      "Tell a secret no one knows.",
+      "Describe your week in one sentence.",
+      "What's your biggest fear?",
+      "Share something that made you smile today.",
+      "What would you do if you had no fear?",
+      "What's a dream you've given up on?",
+    ];
 
-    const { message, isForwarding, originalChainId, hopCount = 0 } = req.body;
-
-    if (isForwarding && hopCount >= 10) {
-      return res.status(400).json({
-        success: false,
-        message: 'Chain has reached maximum hops'
-      });
-    }
-
-    const whisperPost = new WhisperPost({
-      content: { text: message },
-      category: 'Random',
-      isChainMessage: true,
-      chainId: originalChainId || new require('mongoose').Types.ObjectId().toString(),
-      originalMessage: isForwarding ? req.body.originalMessage : message,
-      hopCount: isForwarding ? hopCount + 1 : 0
-    });
-
-    await whisperPost.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Whisper chain message created',
-      post: whisperPost,
-      chainInfo: {
-        chainId: whisperPost.chainId,
-        hopCount: whisperPost.hopCount,
-        isNewChain: !isForwarding
-      }
-    });
-
-  } catch (error) {
-    console.error('Create whisper chain error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
-
-// GET /api/whisperwall/confession-room/:roomId - Get confession room messages
-router.get('/confession-room/:roomId', generateSessionId, async (req, res) => {
-  try {
-    const { roomId } = req.params;
-
-    const posts = await WhisperPost.find({
-      'confessionRoom.roomId': roomId,
-      'confessionRoom.expiresAt': { $gt: new Date() }
-    }).sort({ createdAt: -1 });
+    const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86400000);
+    const challenge = challenges[dayOfYear % challenges.length];
 
     res.json({
       success: true,
-      posts,
-      roomInfo: {
-        id: roomId,
-        activeUntil: posts.length > 0 ? posts[0].confessionRoom.expiresAt : null,
-        messageCount: posts.length
-      }
+      challenge,
+      dayOfYear
     });
 
   } catch (error) {
-    console.error('Get confession room error:', error);
+    console.error('Get daily challenge error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'
@@ -380,142 +302,103 @@ router.get('/confession-room/:roomId', generateSessionId, async (req, res) => {
   }
 });
 
-// POST /api/whisperwall/confession-room - Create confession room message
-router.post('/confession-room', generateSessionId, [
-  body('content').notEmpty().isLength({ max: 500 }),
-  body('roomId').notEmpty(),
-  body('theme').optional().isString()
-], async (req, res) => {
+// GET /api/whisperwall/top-whisper - Get yesterday's top whisper (blurred)
+router.get('/top-whisper', optionalAuth, async (req, res) => {
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({
-        success: false,
-        message: 'Validation failed',
-        errors: errors.array()
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
+
+    const yesterdayEnd = new Date(yesterday);
+    yesterdayEnd.setHours(23, 59, 59, 999);
+
+    const topWhisper = await WhisperPost.findOne({
+      createdAt: { $gte: yesterday, $lte: yesterdayEnd },
+      isHidden: false
+    })
+    .sort({ 'reactions.total': -1 })
+    .limit(1);
+
+    if (!topWhisper) {
+      return res.json({
+        success: true,
+        topWhisper: null
       });
     }
 
-    const { content, roomId, theme } = req.body;
-
-    // Confession rooms last 30 minutes
-    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
-
-    const confessionPost = new WhisperPost({
-      content: { text: content },
-      category: 'Confession',
-      confessionRoom: {
-        roomId,
-        theme: theme || 'General',
-        expiresAt
-      },
-      expiresAt // Also set the document expiry
-    });
-
-    await confessionPost.save();
-
-    res.status(201).json({
-      success: true,
-      message: 'Confession posted',
-      post: confessionPost
-    });
-
-  } catch (error) {
-    console.error('Create confession error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
-
-// GET /api/whisperwall/random-confession - Get random confession (roulette)
-router.get('/random-confession', async (req, res) => {
-  try {
-    const randomPost = await WhisperPost.aggregate([
-      { 
-        $match: { 
-          category: 'Confession',
-          isHidden: false
-        } 
-      },
-      { $sample: { size: 1 } }
-    ]);
-
-    if (randomPost.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'No confessions available'
-      });
-    }
-
-    res.json({
-      success: true,
-      confession: randomPost[0]
-    });
-
-  } catch (error) {
-    console.error('Get random confession error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Server error'
-    });
-  }
-});
-
-// GET /api/whisperwall/mood-heatmap - Get emotion heatmap data
-router.get('/mood-heatmap', async (req, res) => {
-  try {
-    const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-
-    const moodData = await WhisperPost.aggregate([
-      {
-        $match: {
-          createdAt: { $gte: last24Hours },
-          isHidden: false
-        }
-      },
-      {
-        $group: {
-          _id: '$category',
-          count: { $sum: 1 },
-          totalReactions: { $sum: '$reactions.total' },
-          avgReactions: { $avg: '$reactions.total' }
-        }
-      },
-      {
-        $sort: { count: -1 }
-      }
-    ]);
-
-    // Map categories to emotions/moods
-    const moodMapping = {
-      'Vent': 'frustrated',
-      'Confession': 'secretive',
-      'Comedy': 'happy',
-      'Music': 'creative',
-      'Gaming': 'excited',
-      'Advice': 'thoughtful',
-      'Random': 'curious'
+    // Return blurred version
+    const blurredWhisper = {
+      category: topWhisper.category,
+      preview: topWhisper.content.text.substring(0, 20) + '...',
+      reactionCount: topWhisper.reactions.total
     };
 
-    const heatmapData = moodData.map(mood => ({
-      category: mood._id,
-      emotion: moodMapping[mood._id] || 'neutral',
-      intensity: Math.min(mood.count / 10, 1), // Normalize to 0-1
-      count: mood.count,
-      avgReactions: mood.avgReactions
-    }));
-
     res.json({
       success: true,
-      heatmap: heatmapData,
-      timestamp: new Date(),
-      period: '24h'
+      topWhisper: blurredWhisper
     });
 
   } catch (error) {
-    console.error('Get mood heatmap error:', error);
+    console.error('Get top whisper error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// GET /api/whisperwall/mood-weather - Get mood-based weather
+router.get('/mood-weather', optionalAuth, async (req, res) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const whispers = await WhisperPost.find({
+      createdAt: { $gte: today },
+      isHidden: false
+    });
+
+    // Count categories to determine mood
+    const categoryCounts = {};
+    whispers.forEach(w => {
+      categoryCounts[w.category] = (categoryCounts[w.category] || 0) + 1;
+    });
+
+    // Determine dominant mood
+    let mood = 'calm';
+    let weather = 'clear';
+
+    const sadCategories = ['Vent', 'Confession'];
+    const hypeCategories = ['Gaming', 'Sports', 'Music'];
+    const loveCategories = ['Love', 'Beauty'];
+
+    const sadCount = sadCategories.reduce((sum, cat) => sum + (categoryCounts[cat] || 0), 0);
+    const hypeCount = hypeCategories.reduce((sum, cat) => sum + (categoryCounts[cat] || 0), 0);
+    const loveCount = loveCategories.reduce((sum, cat) => sum + (categoryCounts[cat] || 0), 0);
+
+    if (sadCount > hypeCount && sadCount > loveCount) {
+      mood = 'melancholic';
+      weather = 'rain';
+    } else if (hypeCount > sadCount && hypeCount > loveCount) {
+      mood = 'energetic';
+      weather = 'sparkles';
+    } else if (loveCount > sadCount && loveCount > hypeCount) {
+      mood = 'romantic';
+      weather = 'hearts';
+    }
+
+    res.json({
+      success: true,
+      mood,
+      weather,
+      stats: {
+        totalWhispers: whispers.length,
+        categoryCounts
+      }
+    });
+
+  } catch (error) {
+    console.error('Get mood weather error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'

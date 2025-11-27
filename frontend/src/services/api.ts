@@ -314,6 +314,11 @@ export const userAPI = {
     const response: AxiosResponse<ApiResponse> = await api.get('/users/blocked');
     return response.data;
   },
+
+  trackPreference: async (category: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post('/user/preferences/track', { category });
+    return response.data;
+  },
 };
 
 // Posts API
@@ -339,6 +344,11 @@ export const postsAPI = {
       duration?: '1hour' | '1day' | '1week';
     };
     tags?: string[];
+    geoLocation?: {
+      type: 'Point';
+      coordinates: [number, number];
+    };
+    locationEnabled?: boolean;
   }): Promise<ApiResponse> => {
     const response: AxiosResponse<ApiResponse> = await api.post('/posts', postData);
     return response.data;
@@ -364,10 +374,12 @@ export const postsAPI = {
     });
     if (category) params.append('category', category);
     
-    const response: AxiosResponse<PaginatedResponse<any>> = await api.get(
+    const response: AxiosResponse<any> = await api.get(
       `/posts/explore?${params}`
     );
-    return response.data;
+    // Backend returns { success, posts, pagination }. Normalize to { success, data, pagination }
+    const { success, posts, pagination } = response.data || {};
+    return { success: !!success, data: posts || [], pagination } as PaginatedResponse<any>;
   },
 
   searchPosts: async (
@@ -383,10 +395,12 @@ export const postsAPI = {
     });
     if (category) params.append('category', category);
     
-    const response: AxiosResponse<PaginatedResponse<any>> = await api.get(
+    const response: AxiosResponse<any> = await api.get(
       `/posts/search?${params}`
     );
-    return response.data;
+    // Backend returns { success, posts, pagination }. Normalize to { success, data, pagination }
+    const { success, posts, pagination } = response.data || {};
+    return { success: !!success, data: posts || [], pagination } as PaginatedResponse<any>;
   },
 
   getPost: async (postId: string): Promise<ApiResponse> => {
@@ -456,6 +470,11 @@ export const postsAPI = {
     const response: AxiosResponse<ApiResponse> = await api.delete(`/posts/${postId}/hide`);
     return response.data;
   },
+
+  markOneTimeViewed: async (postId: string): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.post(`/posts/${postId}/mark-viewed`);
+    return response.data;
+  },
 };
 
 // Chat API
@@ -500,11 +519,10 @@ export const chatAPI = {
 
 // WhisperWall API
 export const whisperWallAPI = {
-  createWhisperPost: async (postData: {
+  // Simplified API methods for WhisperWall
+  createWhisper: async (postData: {
     content: {
       text: string;
-      image?: string;
-      voiceNote?: string;
       media?: Array<{
         url: string;
         type: 'image' | 'video' | 'audio';
@@ -515,29 +533,13 @@ export const whisperWallAPI = {
     };
     category: string;
     tags?: string[];
-    location?: {
-      city: string;
-      country: string;
-      emoji: string;
-    };
+    backgroundAnimation?: 'none' | 'rain' | 'neon' | 'fire' | 'snow' | 'hearts' | 'mist';
   }): Promise<ApiResponse> => {
-    console.log('🌐 Making WhisperWall API call with data:', postData);
-    console.log('🌐 API base URL:', api.defaults.baseURL);
-    console.log('🌐 Full URL:', `${api.defaults.baseURL}/whisperwall`);
-    try {
-      const response: AxiosResponse<ApiResponse> = await api.post('/whisperwall', postData);
-      console.log('🌐 WhisperWall API response:', response.data);
-      console.log('🌐 Response status:', response.status);
-      return response.data;
-    } catch (error) {
-      console.error('🌐 WhisperWall API error:', error);
-      console.error('🌐 Error response data:', (error as any).response?.data);
-      console.error('🌐 Error status:', (error as any).response?.status);
-      throw error;
-    }
+    const response: AxiosResponse<ApiResponse> = await api.post('/whisperwall', postData);
+    return response.data;
   },
 
-  getWhisperPosts: async (
+  getWhispers: async (
     page: number = 1,
     limit: number = 20,
     category?: string,
@@ -550,25 +552,16 @@ export const whisperWallAPI = {
     });
     if (category) params.append('category', category);
     
-    console.log('🌐 Getting WhisperWall posts with params:', params.toString());
-    try {
-      const response: AxiosResponse<any> = await api.get(
-        `/whisperwall?${params}`
-      );
-      console.log('🌐 WhisperWall posts response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('🌐 WhisperWall posts error:', error);
-      throw error;
-    }
+    const response: AxiosResponse<any> = await api.get(`/whisperwall?${params}`);
+    return response.data;
   },
 
-  getWhisperPost: async (postId: string): Promise<ApiResponse> => {
+  getWhisper: async (postId: string): Promise<ApiResponse> => {
     const response: AxiosResponse<ApiResponse> = await api.get(`/whisperwall/${postId}`);
     return response.data;
   },
 
-  reactToWhisperPost: async (
+  reactToWhisper: async (
     postId: string,
     reactionType: 'funny' | 'rage' | 'shock' | 'relatable' | 'love' | 'thinking'
   ): Promise<ApiResponse> => {
@@ -592,50 +585,18 @@ export const whisperWallAPI = {
     return response.data;
   },
 
-  createWhisperChain: async (
-    message: string,
-    isForwarding: boolean = false,
-    originalChainId?: string,
-    hopCount?: number,
-    originalMessage?: string
-  ): Promise<ApiResponse> => {
-    const response: AxiosResponse<ApiResponse> = await api.post('/whisperwall/whisper-chain', {
-      message,
-      isForwarding,
-      originalChainId,
-      hopCount,
-      originalMessage,
-    });
+  getDailyChallenge: async (): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.get('/whisperwall/daily-challenge');
     return response.data;
   },
 
-  getConfessionRoom: async (roomId: string): Promise<ApiResponse> => {
-    const response: AxiosResponse<ApiResponse> = await api.get(
-      `/whisperwall/confession-room/${roomId}`
-    );
+  getTopWhisper: async (): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.get('/whisperwall/top-whisper');
     return response.data;
   },
 
-  createConfessionPost: async (
-    content: string,
-    roomId: string,
-    theme?: string
-  ): Promise<ApiResponse> => {
-    const response: AxiosResponse<ApiResponse> = await api.post('/whisperwall/confession-room', {
-      content,
-      roomId,
-      theme,
-    });
-    return response.data;
-  },
-
-  getRandomConfession: async (): Promise<ApiResponse> => {
-    const response: AxiosResponse<ApiResponse> = await api.get('/whisperwall/random-confession');
-    return response.data;
-  },
-
-  getMoodHeatmap: async (): Promise<ApiResponse> => {
-    const response: AxiosResponse<ApiResponse> = await api.get('/whisperwall/mood-heatmap');
+  getMoodWeather: async (): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.get('/whisperwall/mood-weather');
     return response.data;
   },
 };
@@ -694,6 +655,46 @@ export const reactionsAPI = {
   ): Promise<ApiResponse> => {
     const response: AxiosResponse<ApiResponse> = await api.get(
       `/reactions/trending?timeframe=${timeframe}&limit=${limit}`
+    );
+    return response.data;
+  },
+};
+
+// Location API
+export const locationAPI = {
+  getNearbyPosts: async (
+    latitude: number,
+    longitude: number,
+    radius: number = 50,
+    page: number = 1,
+    limit: number = 20
+  ): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.get(
+      `/location/nearby?latitude=${latitude}&longitude=${longitude}&radius=${radius}&page=${page}&limit=${limit}`
+    );
+    return response.data;
+  },
+
+  getPostsByRing: async (
+    latitude: number,
+    longitude: number,
+    ring: 'inner' | 'mid' | 'outer' = 'inner',
+    page: number = 1,
+    limit: number = 20
+  ): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.get(
+      `/location/ring?latitude=${latitude}&longitude=${longitude}&ring=${ring}&page=${page}&limit=${limit}`
+    );
+    return response.data;
+  },
+
+  getAreaStats: async (
+    latitude: number,
+    longitude: number,
+    radius: number = 10
+  ): Promise<ApiResponse> => {
+    const response: AxiosResponse<ApiResponse> = await api.get(
+      `/location/area-stats?latitude=${latitude}&longitude=${longitude}&radius=${radius}`
     );
     return response.data;
   },

@@ -10,6 +10,7 @@ const socketIo = require('socket.io');
 const cron = require('node-cron');
 const path = require('path');
 const helmet = require('helmet');
+const session = require('express-session');
 
 const app = express();
 const server = http.createServer(app);
@@ -29,6 +30,7 @@ const postRoutes = require('./routes/posts');
 const whisperWallRoutes = require('./routes/whisperwall');
 const reactionRoutes = require('./routes/reactions');
 const chatRoutes = require('./routes/chat');
+const locationRoutes = require('./routes/location');
 
 // Upload middleware
 const { uploadMiddleware, getFileUrl } = require('./middleware/upload');
@@ -66,6 +68,17 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// --- Session middleware for WhisperWall ---
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'whisper-wall-secret-key',
+  resave: false,
+  saveUninitialized: true,
+  cookie: { 
+    secure: process.env.NODE_ENV === 'production',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
+}));
 
 // --- Body parser ---
 app.use(express.json({ limit: '10mb' }));
@@ -140,6 +153,7 @@ app.use('/api/posts', postRoutes);
 app.use('/api/whisperwall', whisperWallRoutes);
 app.use('/api/reactions', reactionRoutes);
 app.use('/api/chat', chatRoutes);
+app.use('/api/location', locationRoutes);
 
 // --- Media upload endpoints ---
 app.post('/api/upload/single', uploadMiddleware.single('media'), uploadMiddleware.handleError, (req, res) => {

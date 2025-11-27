@@ -277,10 +277,10 @@ router.get('/search', async (req, res) => {
   try {
     const { q, category } = req.query;
     
-    if (!q || q.length < 2) {
+    if (!q || q.length < 1) {
       return res.status(400).json({
         success: false,
-        message: 'Search query must be at least 2 characters'
+        message: 'Search query must be at least 1 character'
       });
     }
 
@@ -695,6 +695,52 @@ router.get('/blocked', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('Get blocked users error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// POST /api/user/preferences/track - Track interaction with post outside preferences
+router.post('/preferences/track', authenticateToken, [
+  body('category').notEmpty().withMessage('Category is required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { category } = req.body;
+    const userId = req.user._id;
+
+    const user = await User.findById(userId);
+    
+    // Add category to preferences if not already present
+    if (!user.preferences.includes(category)) {
+      user.preferences.push(category);
+      await user.save();
+      
+      res.json({
+        success: true,
+        message: `${category} added to your preferences`,
+        preferences: user.preferences
+      });
+    } else {
+      res.json({
+        success: true,
+        message: 'Category already in preferences',
+        preferences: user.preferences
+      });
+    }
+
+  } catch (error) {
+    console.error('Track preference error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'

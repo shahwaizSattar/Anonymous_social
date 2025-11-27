@@ -9,12 +9,12 @@ import {
   Image,
   FlatList,
   Dimensions,
-  TextInput,
   Platform,
   StatusBar,
   Animated,
   Modal,
 } from 'react-native';
+import { Video, ResizeMode, Audio } from 'expo-av';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../../context/ThemeContext';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
@@ -27,8 +27,12 @@ import Toast from 'react-native-toast-message';
 import NotificationBell from '../../components/NotificationBell';
 import ReactionPopup from '../../components/ReactionPopup';
 import PostOptions from '../../components/PostOptions';
+import UserPostOptions from '../../components/UserPostOptions';
+import EditPostModal from '../../components/EditPostModal';
+import OneTimePostCard from '../../components/OneTimePostCard';
 import { convertAvatarUrl } from '../../utils/imageUtils';
 import { censorText } from '../../utils/censorUtils';
+import { formatTimeAgo } from '../../utils/timeUtils';
 
 type HomeScreenNavigationProp = StackNavigationProp<RootStackParamList, 'Home'>;
 
@@ -50,7 +54,9 @@ const HomeScreen: React.FC = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
+  const [filteredPosts, setFilteredPosts] = useState<any[]>([]);
   const [reactionPopup, setReactionPopup] = useState<{
     visible: boolean;
     postId: string;
@@ -73,8 +79,19 @@ const HomeScreen: React.FC = () => {
     authorId: undefined,
     authorUsername: undefined,
   });
+  const [userPostOptions, setUserPostOptions] = useState<{
+    visible: boolean;
+    postId: string;
+  }>({
+    visible: false,
+    postId: '',
+  });
+  const [editModalVisible, setEditModalVisible] = useState(false);
+  const [postToEdit, setPostToEdit] = useState<any>(null);
   const postCardRefs = useRef<{ [key: string]: Animated.Value }>({});
   const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const [voiceNotePlaying, setVoiceNotePlaying] = useState<{ [key: string]: boolean }>({});
+  const [voiceSounds, setVoiceSounds] = useState<{ [key: string]: Audio.Sound }>({});
   const [undoAction, setUndoAction] = useState<{
     type: 'mute' | 'hide' | null;
     userId?: string;
@@ -83,6 +100,7 @@ const HomeScreen: React.FC = () => {
     timeout?: NodeJS.Timeout;
     removedPosts?: any[];
   }>({ type: null });
+  const [hoveredPost, setHoveredPost] = useState<string | null>(null);
 
   const loadPosts = async () => {
     try {
@@ -172,19 +190,36 @@ const HomeScreen: React.FC = () => {
       const post = posts.find(p => p._id === postId);
       if (!post) return;
       
+      // Check if reactions are locked
+      if (post.interactions?.reactionsLocked) {
+        Toast.show({
+          type: 'error',
+          text1: 'Reactions Locked',
+          text2: 'Reactions are locked on this post',
+        });
+        return;
+      }
+      
+      // Track preference if post is outside user's preferences
+      if (post.isOutsidePreferences && post.category) {
+        try {
+          await userAPI.trackPreference(post.category);
+          Toast.show({
+            type: 'info',
+            text1: 'Preference Updated',
+            text2: `${post.category} added to your interests`,
+            visibilityTime: 2000,
+          });
+        } catch (error) {
+          console.error('Failed to track preference:', error);
+        }
+      }
+      
       let response;
       if (post.userReaction === reactionType) {
         response = await reactionsAPI.removeReaction(postId);
-        Toast.show({
-          type: 'success',
-          text1: 'Reaction removed',
-        });
       } else {
         response = await reactionsAPI.addReaction(postId, reactionType);
-        Toast.show({
-          type: 'success',
-          text1: 'Reaction added',
-        });
       }
       
       console.log('Reaction response:', response);
@@ -206,12 +241,13 @@ const HomeScreen: React.FC = () => {
         console.error('Invalid response format:', response);
         await loadPosts();
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error handling reaction:', error);
+      const errorMessage = error?.response?.data?.message || 'Failed to update reaction';
       Toast.show({
         type: 'error',
         text1: 'Error',
-        text2: 'Failed to update reaction',
+        text2: errorMessage,
       });
     }
   };
@@ -367,6 +403,66 @@ const HomeScreen: React.FC = () => {
     setUndoAction({ type: null });
   };
 
+
+
+  const handleCategoryFilter = async (category: string) => {
+    try {
+      setLoading(true);
+      setActiveCategory(category);
+      
+      console.log('🔍 Filtering posts by category:', category);
+      // Get posts by category using explore endpoint
+      const response = await postsAPI.getExplorePosts(1, 50, category, 'recent');
+      console.log('📊 Category filter response:', response);
+      if (response.success && response.data) {
+        console.log('✅ Found', response.data.length, 'posts in category:', category);
+        setFilteredPosts(response.data);
+      } else {
+        console.log('❌ No posts found or request failed');
+        setFilteredPosts([]);
+      }
+    } catch (error) {
+      console.log('❌ Error filtering by category:', error);
+      setFilteredPosts([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearCategoryFilter = () => {
+    setActiveCategory(null);
+    setFilteredPosts([]);
+  };
+
+
+
+  const handleEditPost = (postId: string) => {
+    const post = posts.find(p => p._id === postId);
+    if (post) {
+      setPostToEdit(post);
+      setEditModalVisible(true);
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    try {
+      await postsAPI.deletePost(postId);
+      setPosts(prevPosts => prevPosts.filter(p => p._id !== postId));
+      Toast.show({
+        type: 'success',
+        text1: 'Post deleted',
+        text2: 'Your post has been removed',
+      });
+    } catch (error) {
+      console.error('Failed to delete post:', error);
+      Toast.show({
+        type: 'error',
+        text1: 'Error',
+        text2: 'Failed to delete post. Please try again.',
+      });
+    }
+  };
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
@@ -419,22 +515,7 @@ const HomeScreen: React.FC = () => {
       color: theme.colors.text,
       flexShrink: 1,
     },
-    searchContainer: {
-      flex: 1,
-      marginHorizontal: theme.spacing.sm,
-      minWidth: 0,
-    },
-    searchInput: {
-      backgroundColor: theme.colors.background,
-      borderRadius: theme.borderRadius.lg,
-      paddingHorizontal: theme.spacing.md,
-      paddingVertical: theme.spacing.sm,
-      fontSize: 14,
-      color: theme.colors.text,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      width: '100%',
-    },
+
     rightSection: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -512,8 +593,15 @@ const HomeScreen: React.FC = () => {
       borderWidth: 0,
       borderBottomWidth: 1,
       borderBottomColor: theme.colors.border + '60',
-      overflow: 'hidden',
+      overflow: 'visible',
       width: '100%',
+    },
+    postCardGlow: {
+      shadowColor: theme.colors.primary,
+      shadowOffset: { width: 0, height: 0 },
+      shadowOpacity: 0.1,
+      shadowRadius: 20,
+      elevation: 8,
     },
     postCategory: { fontSize: 12, fontWeight: '600', marginBottom: theme.spacing.sm },
     postText: { 
@@ -679,8 +767,246 @@ const HomeScreen: React.FC = () => {
       fontWeight: '600',
       color: theme.colors.primary,
     },
+    categoryFilterHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: theme.colors.primary + '15',
+      paddingHorizontal: theme.spacing.lg,
+      paddingVertical: theme.spacing.md,
+      borderBottomWidth: 1,
+      borderBottomColor: theme.colors.primary + '30',
+    },
+    categoryFilterContent: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    categoryFilterIcon: {
+      fontSize: 20,
+      marginRight: theme.spacing.sm,
+    },
+    categoryFilterText: {
+      fontSize: 16,
+      fontWeight: '600',
+      color: theme.colors.primary,
+      marginRight: theme.spacing.sm,
+    },
+    categoryFilterCount: {
+      fontSize: 14,
+      color: theme.colors.textSecondary,
+    },
+    categoryFilterClose: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: theme.colors.surface,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    categoryFilterCloseText: {
+      fontSize: 18,
+      color: theme.colors.text,
+      fontWeight: 'bold',
+    },
+    voiceNoteContainer: {
+      marginVertical: theme.spacing.md,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'hidden',
+    },
+    voiceNoteButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+    },
+    playButtonCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    playButtonIcon: {
+      color: '#000',
+      fontSize: 16,
+      marginLeft: 2,
+    },
+    voiceWaveformContainer: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    waveformBars: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 24,
+      gap: 2,
+      marginBottom: 4,
+    },
+    waveformBar: {
+      width: 2.5,
+      borderRadius: 2,
+      opacity: 0.8,
+    },
+    voiceNoteFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    voiceNoteDuration: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: theme.colors.textSecondary,
+    },
+    voiceNoteEffect: {
+      fontSize: 11,
+      color: theme.colors.primary,
+      textTransform: 'capitalize',
+      fontWeight: '500',
+    },
   });
 
+
+  const getVoiceEffectSettings = (effect?: string) => {
+    // Apply pitch and rate modifications for different voice effects
+    switch (effect) {
+      case 'deep':
+        return { rate: 0.8, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'soft':
+        return { rate: 0.9, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'robot':
+        return { rate: 1.0, pitchCorrectionQuality: Audio.PitchCorrectionQuality.Low };
+      case 'glitchy':
+        return { rate: 1.2, pitchCorrectionQuality: Audio.PitchCorrectionQuality.Low };
+      case 'girly':
+        return { rate: 1.15, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'boyish':
+        return { rate: 0.85, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      default:
+        return { rate: 1.0, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+    }
+  };
+
+  const playVoiceNote = async (postId: string, voiceUrl: string, effect?: string) => {
+    try {
+      // If already playing, pause it
+      if (voiceNotePlaying[postId] && voiceSounds[postId]) {
+        await voiceSounds[postId].pauseAsync();
+        setVoiceNotePlaying(prev => ({ ...prev, [postId]: false }));
+        return;
+      }
+
+      // If sound exists but not playing, check if finished and replay
+      if (voiceSounds[postId]) {
+        const status = await voiceSounds[postId].getStatusAsync();
+        if (status.isLoaded) {
+          // If finished, replay from start
+          if (status.didJustFinish || (status.durationMillis && status.positionMillis >= status.durationMillis)) {
+            await voiceSounds[postId].replayAsync();
+          } else {
+            await voiceSounds[postId].playAsync();
+          }
+          setVoiceNotePlaying(prev => ({ ...prev, [postId]: true }));
+        }
+        return;
+      }
+
+      // Create new sound with voice effect settings
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      const playbackSettings = getVoiceEffectSettings(effect);
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: voiceUrl },
+        { 
+          shouldPlay: true,
+          ...playbackSettings
+        },
+        (status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setVoiceNotePlaying(prev => ({ ...prev, [postId]: false }));
+          }
+        }
+      );
+
+      setVoiceSounds(prev => ({ ...prev, [postId]: sound }));
+      setVoiceNotePlaying(prev => ({ ...prev, [postId]: true }));
+    } catch (error) {
+      console.error('Error playing voice note:', error);
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to play voice note' });
+    }
+  };
+
+  const formatVoiceDuration = (seconds: number): string => {
+    if (seconds < 60) {
+      return `0:${seconds.toString().padStart(2, '0')}`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const renderVoiceNote = (voiceNote: { url: string; effect?: string; duration?: number }) => {
+    const postId = 'voice_' + voiceNote.url;
+    const isPlaying = voiceNotePlaying[postId] || false;
+    const duration = voiceNote.duration || 0;
+    
+    console.log('🎤 Rendering voice note:', { 
+      url: voiceNote.url, 
+      duration, 
+      effect: voiceNote.effect,
+      formatted: formatVoiceDuration(duration)
+    });
+
+    return (
+      <View style={styles.voiceNoteContainer}>
+        <TouchableOpacity
+          style={styles.voiceNoteButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            playVoiceNote(postId, voiceNote.url, voiceNote.effect);
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.playButtonCircle}>
+            <Text style={styles.playButtonIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+          </View>
+          
+          <View style={styles.voiceWaveformContainer}>
+            <View style={styles.waveformBars}>
+              {[...Array(25)].map((_, i) => (
+                <View 
+                  key={i} 
+                  style={[
+                    styles.waveformBar,
+                    { 
+                      height: Math.random() * 16 + 8,
+                      backgroundColor: isPlaying ? '#00D4AA' : '#555'
+                    }
+                  ]} 
+                />
+              ))}
+            </View>
+            <View style={styles.voiceNoteFooter}>
+              <Text style={styles.voiceNoteDuration}>
+                {duration > 0 ? formatVoiceDuration(duration) : '0:00'}
+              </Text>
+              {voiceNote.effect && voiceNote.effect !== 'none' && (
+                <Text style={styles.voiceNoteEffect}>• {voiceNote.effect}</Text>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   const renderMedia = (media: any[]) => {
     if (!media || media.length === 0) return null;
@@ -693,21 +1019,25 @@ const HomeScreen: React.FC = () => {
     const imageHeight = imageWidth * 0.75; // 4:3 aspect ratio, adjust as needed
     
     return (
-      <View style={styles.mediaContainer}>
+      <TouchableOpacity 
+        activeOpacity={1} 
+        onPress={(e) => e.stopPropagation()}
+        style={styles.mediaContainer}
+      >
         {media.length === 1 ? (
           // Single image - display centered and full width
           <View style={styles.mediaItem}>
             {media[0].type === 'video' ? (
               <View style={styles.videoContainer}>
-                <View style={[styles.mediaContent, { 
-                  width: imageWidth, 
-                  height: imageHeight,
-                  backgroundColor: '#000', 
-                  justifyContent: 'center', 
-                  alignItems: 'center' 
-                }]}>
-                  <Text style={{ color: '#fff' }}>🎥 Video</Text>
-                </View>
+                <Video
+                  source={{ uri: media[0].url }}
+                  style={[styles.mediaContent, { width: imageWidth, height: imageHeight }]}
+                  useNativeControls
+                  resizeMode={ResizeMode.CONTAIN}
+                  isLooping={false}
+                  onError={(error) => console.log('❌ Video load error:', error, 'URL:', media[0].url)}
+                  onLoad={() => console.log('✅ Video loaded successfully:', media[0].url)}
+                />
               </View>
             ) : (
               <Image 
@@ -733,15 +1063,15 @@ const HomeScreen: React.FC = () => {
               <View style={styles.mediaItem}>
                 {item.type === 'video' ? (
                   <View style={styles.videoContainer}>
-                      <View style={[styles.mediaContent, { 
-                        width: imageWidth * 0.9, 
-                        height: imageHeight * 0.9,
-                        backgroundColor: '#000', 
-                        justifyContent: 'center', 
-                        alignItems: 'center' 
-                      }]}>
-                      <Text style={{ color: '#fff' }}>🎥 Video</Text>
-                    </View>
+                    <Video
+                      source={{ uri: item.url }}
+                      style={[styles.mediaContent, { width: imageWidth * 0.9, height: imageHeight * 0.9 }]}
+                      useNativeControls
+                      resizeMode={ResizeMode.CONTAIN}
+                      isLooping={false}
+                      onError={(error) => console.log('❌ Video load error:', error, 'URL:', item.url)}
+                      onLoad={() => console.log('✅ Video loaded successfully:', item.url)}
+                    />
                   </View>
                 ) : (
                   <Image 
@@ -757,7 +1087,7 @@ const HomeScreen: React.FC = () => {
           }}
         />
         )}
-      </View>
+      </TouchableOpacity>
     );
   };
 
@@ -795,22 +1125,12 @@ const HomeScreen: React.FC = () => {
             </Text>
           </View>
           
-          {/* Center: Search Bar */}
-          <TouchableOpacity 
-            style={styles.searchContainer}
-            onPress={() => navigation.navigate('Search' as never)}
-            activeOpacity={0.7}
-          >
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search..."
-              placeholderTextColor={theme.colors.textSecondary}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              editable={false}
-              onFocus={() => navigation.navigate('Search' as never)}
-            />
-          </TouchableOpacity>
+          {/* Center: App Title */}
+          <View style={{ flex: 1, alignItems: 'center' }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', color: theme.colors.text }}>
+              Feed
+            </Text>
+          </View>
 
           {/* Right: Messaging and Notification Icons */}
           <View style={styles.rightSection}>
@@ -826,13 +1146,31 @@ const HomeScreen: React.FC = () => {
       </View>
       </SafeAreaView>
 
+
+
+      {/* Category Filter Header */}
+      {activeCategory && (
+        <View style={styles.categoryFilterHeader}>
+          <View style={styles.categoryFilterContent}>
+            <Text style={styles.categoryFilterIcon}>📂</Text>
+            <Text style={styles.categoryFilterText}>#{activeCategory}</Text>
+            <Text style={styles.categoryFilterCount}>
+              {filteredPosts.length} {filteredPosts.length === 1 ? 'post' : 'posts'}
+            </Text>
+          </View>
+          <TouchableOpacity onPress={clearCategoryFilter} style={styles.categoryFilterClose}>
+            <Text style={styles.categoryFilterCloseText}>✕</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {/* Content */}
       <ScrollView
         style={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {posts.length > 0 ? (
-          posts.map(post => (
+        {(activeCategory ? filteredPosts : posts).length > 0 ? (
+          (activeCategory ? filteredPosts : posts).map(post => (
             (() => {
               // Initialize animation value if not exists
               if (!postCardRefs.current[post._id]) {
@@ -845,6 +1183,7 @@ const HomeScreen: React.FC = () => {
                 key={post._id}
                 style={[
                   styles.postCard,
+                  hoveredPost === post._id && styles.postCardGlow,
                   {
                     transform: [{ scale: scaleAnim }],
                   },
@@ -852,6 +1191,8 @@ const HomeScreen: React.FC = () => {
               >
                 <TouchableOpacity
                   activeOpacity={1}
+                  onPressIn={() => setHoveredPost(post._id)}
+                  onPressOut={() => setHoveredPost(null)}
                   onPress={() => {
                     // Animation sequence: compress -> lift -> navigate
                     Animated.parallel([
@@ -907,16 +1248,24 @@ const HomeScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                  <Text style={[styles.postDate, { color: theme.colors.textSecondary, marginRight: 12 }]}>{new Date(post.createdAt).toLocaleDateString()}</Text>
+                  <Text style={[styles.postDate, { color: theme.colors.textSecondary, marginRight: 12 }]}>{formatTimeAgo(post.createdAt)}</Text>
                   <TouchableOpacity
                     onPress={(e) => {
                       e.stopPropagation();
-                      setPostOptions({
-                        visible: true,
-                        postId: post._id,
-                        authorId: post.author?._id,
-                        authorUsername: post.author?.username,
-                      });
+                      // Check if this is the logged-in user's post
+                      if (post.author?._id === user?._id) {
+                        setUserPostOptions({
+                          visible: true,
+                          postId: post._id,
+                        });
+                      } else {
+                        setPostOptions({
+                          visible: true,
+                          postId: post._id,
+                          authorId: post.author?._id,
+                          authorUsername: post.author?.username,
+                        });
+                      }
                     }}
                     style={{
                       padding: 10,
@@ -978,8 +1327,16 @@ const HomeScreen: React.FC = () => {
                   </View>
                 )}
               </View>
-              {post.content?.text && <Text style={[styles.postText, { color: theme.colors.text }]} numberOfLines={3}>{censorText(post.content.text)}</Text>}
-              {renderMedia(post.content.media)}
+              {/* One-Time Post or Normal Post */}
+              {post.oneTime?.enabled ? (
+                <OneTimePostCard post={post} />
+              ) : (
+                <>
+                  {post.content?.text && <Text style={[styles.postText, { color: theme.colors.text }]} numberOfLines={3}>{censorText(post.content.text)}</Text>}
+                  {post.content?.voiceNote?.url && renderVoiceNote(post.content.voiceNote)}
+                  {renderMedia(post.content.media)}
+                </>
+              )}
               
               {/* Like, Comment Actions */}
               <View style={styles.actionButtons}>
@@ -992,9 +1349,22 @@ const HomeScreen: React.FC = () => {
                   style={{ flex: 1 }}
                 >
                 <TouchableOpacity 
-                  style={[styles.actionBtn, post.userReaction && styles.activeActionBtn]}
+                  style={[
+                    styles.actionBtn, 
+                    post.userReaction && styles.activeActionBtn,
+                    post.interactions?.reactionsLocked && { opacity: 0.4 }
+                  ]}
+                  disabled={post.interactions?.reactionsLocked}
                     onPress={(e) => {
                       e.stopPropagation();
+                      if (post.interactions?.reactionsLocked) {
+                        Toast.show({
+                          type: 'error',
+                          text1: 'Reactions Locked',
+                          text2: 'Reactions are locked on this post',
+                        });
+                        return;
+                      }
                       showReactionPopup(post._id, e);
                     }}
                 >
@@ -1002,7 +1372,9 @@ const HomeScreen: React.FC = () => {
                     {post.userReaction ? REACTION_ICONS[post.userReaction as ReactionType] : '👍'}
                   </Text>
                   <Text style={styles.actionBtnText}>
-                    {post.userReaction ? 'Liked' : 'Like'}
+                    {post.userReaction 
+                      ? (post.userReaction.charAt(0).toUpperCase() + post.userReaction.slice(1))
+                      : 'Like'}
                   </Text>
                     {(post.reactionCounts?.total || 0) > 0 && (
                   <Text style={styles.actionBtnCount}>{post.reactionCounts?.total || 0}</Text>
@@ -1012,9 +1384,21 @@ const HomeScreen: React.FC = () => {
                 
                 <View style={{ flex: 1 }}>
                 <TouchableOpacity 
-                  style={styles.actionBtn}
+                  style={[
+                    styles.actionBtn,
+                    post.interactions?.commentsLocked && { opacity: 0.4 }
+                  ]}
+                  disabled={post.interactions?.commentsLocked}
                     onPress={(e) => {
                       e.stopPropagation();
+                      if (post.interactions?.commentsLocked) {
+                        Toast.show({
+                          type: 'error',
+                          text1: 'Comments Locked',
+                          text2: 'Comments are locked on this post',
+                        });
+                        return;
+                      }
                       navigation.navigate('PostDetail', { postId: post._id });
                     }}
                 >
@@ -1031,6 +1415,15 @@ const HomeScreen: React.FC = () => {
                 <Text style={[styles.reactionText, { color: theme.colors.textSecondary }]}>
                   {post.reactionCounts?.total || 0} likes • {post.comments?.length || 0} comments
                 </Text>
+                {(post.interactions?.reactionsLocked || post.interactions?.commentsLocked) && (
+                  <Text style={{ fontSize: 11, color: theme.colors.error, marginTop: 4 }}>
+                    🔒 {post.interactions?.reactionsLocked && post.interactions?.commentsLocked 
+                      ? 'Reactions & Comments locked' 
+                      : post.interactions?.reactionsLocked 
+                        ? 'Reactions locked' 
+                        : 'Comments locked'}
+                  </Text>
+                )}
               </View>
             </TouchableOpacity>
               </Animated.View>
@@ -1040,7 +1433,20 @@ const HomeScreen: React.FC = () => {
         ) : loading ? (
           <View style={styles.placeholderContainer}>
             <Text style={styles.placeholderIcon}>⏳</Text>
-            <Text style={styles.placeholderTitle}>Loading your feed...</Text>
+            <Text style={styles.placeholderTitle}>
+              {activeCategory ? `Loading ${activeCategory} posts...` : 'Loading your feed...'}
+            </Text>
+          </View>
+        ) : activeCategory ? (
+          <View style={styles.placeholderContainer}>
+            <Text style={styles.placeholderIcon}>📂</Text>
+            <Text style={styles.placeholderTitle}>No posts in #{activeCategory}</Text>
+            <Text style={styles.placeholderText}>
+              There are no posts in this category yet. Try searching for something else or create the first post!
+            </Text>
+            <TouchableOpacity style={styles.startButton} onPress={clearCategoryFilter}>
+              <Text style={styles.startButtonText}>Back to Feed</Text>
+            </TouchableOpacity>
           </View>
         ) : (
           <View style={styles.placeholderContainer}>
@@ -1094,6 +1500,24 @@ const HomeScreen: React.FC = () => {
             handleMuteUser(postOptions.authorId, postOptions.authorUsername);
           }
           setPostOptions({ visible: false, postId: '', authorId: undefined, authorUsername: undefined });
+        }}
+      />
+      <UserPostOptions
+        visible={userPostOptions.visible}
+        onClose={() => setUserPostOptions({ visible: false, postId: '' })}
+        postId={userPostOptions.postId}
+        onEdit={() => handleEditPost(userPostOptions.postId)}
+        onDelete={() => handleDeletePost(userPostOptions.postId)}
+      />
+      <EditPostModal
+        visible={editModalVisible}
+        post={postToEdit}
+        onClose={() => {
+          setEditModalVisible(false);
+          setPostToEdit(null);
+        }}
+        onSuccess={() => {
+          loadPosts();
         }}
       />
       

@@ -5,19 +5,22 @@ import {
   StyleSheet,
   Modal,
   TouchableOpacity,
+  ScrollView,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
 
 interface UserPostOptionsProps {
   visible: boolean;
   onClose: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
+  postId: string;
+  onEdit?: () => void;
+  onDelete?: () => void;
 }
 
 const UserPostOptions: React.FC<UserPostOptionsProps> = ({
   visible,
   onClose,
+  postId,
   onEdit,
   onDelete,
 }) => {
@@ -35,6 +38,7 @@ const UserPostOptions: React.FC<UserPostOptionsProps> = ({
       borderTopRightRadius: 20,
       paddingTop: 20,
       paddingBottom: 40,
+      maxHeight: '80%',
     },
     handleBar: {
       width: 40,
@@ -42,6 +46,13 @@ const UserPostOptions: React.FC<UserPostOptionsProps> = ({
       backgroundColor: theme.colors.border,
       borderRadius: 2,
       alignSelf: 'center',
+      marginBottom: 20,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: 'bold',
+      color: theme.colors.text,
+      paddingHorizontal: 20,
       marginBottom: 20,
     },
     optionButton: {
@@ -57,29 +68,26 @@ const UserPostOptions: React.FC<UserPostOptionsProps> = ({
       marginRight: 16,
       width: 32,
     },
-    optionText: {
+    optionTextContainer: {
+      flex: 1,
+    },
+    optionTitle: {
       fontSize: 16,
       fontWeight: '600',
       color: theme.colors.text,
-      flex: 1,
+      marginBottom: 4,
     },
-    deleteOption: {
+    optionDescription: {
+      fontSize: 12,
+      color: theme.colors.textSecondary,
+    },
+    dangerOption: {
       borderTopWidth: 1,
       borderTopColor: theme.colors.border + '30',
       marginTop: 8,
     },
-    deleteText: {
+    dangerText: {
       color: theme.colors.error,
-    },
-    cancelButton: {
-      marginTop: 8,
-      paddingVertical: 16,
-      alignItems: 'center',
-    },
-    cancelText: {
-      fontSize: 16,
-      fontWeight: '600',
-      color: theme.colors.textSecondary,
     },
   });
 
@@ -102,37 +110,44 @@ const UserPostOptions: React.FC<UserPostOptionsProps> = ({
         >
           <View style={styles.handleBar} />
           
-          {/* Edit Option */}
-          <TouchableOpacity
-            style={styles.optionButton}
-            onPress={() => {
-              onEdit();
-              onClose();
-            }}
-          >
-            <Text style={styles.optionIcon}>✏️</Text>
-            <Text style={styles.optionText}>Edit Post</Text>
-          </TouchableOpacity>
+          <Text style={styles.title}>Your Post</Text>
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {/* Edit Post */}
+            <TouchableOpacity
+              style={styles.optionButton}
+              onPress={() => {
+                onEdit?.();
+                onClose();
+              }}
+            >
+              <Text style={styles.optionIcon}>✏️</Text>
+              <View style={styles.optionTextContainer}>
+                <Text style={styles.optionTitle}>Edit Post</Text>
+                <Text style={styles.optionDescription}>
+                  Modify your post content or settings
+                </Text>
+              </View>
+            </TouchableOpacity>
 
-          {/* Delete Option */}
-          <TouchableOpacity
-            style={[styles.optionButton, styles.deleteOption]}
-            onPress={() => {
-              onDelete();
-              onClose();
-            }}
-          >
-            <Text style={styles.optionIcon}>🗑️</Text>
-            <Text style={[styles.optionText, styles.deleteText]}>Delete Post</Text>
-          </TouchableOpacity>
-
-          {/* Cancel Button */}
-          <TouchableOpacity
-            style={styles.cancelButton}
-            onPress={onClose}
-          >
-            <Text style={styles.cancelText}>Cancel</Text>
-          </TouchableOpacity>
+            {/* Delete Post */}
+            <TouchableOpacity
+              style={[styles.optionButton, styles.dangerOption]}
+              onPress={() => {
+                onDelete?.();
+                onClose();
+              }}
+            >
+              <Text style={styles.optionIcon}>🗑️</Text>
+              <View style={styles.optionTextContainer}>
+                <Text style={[styles.optionTitle, styles.dangerText]}>
+                  Delete Post
+                </Text>
+                <Text style={styles.optionDescription}>
+                  Permanently remove this post
+                </Text>
+              </View>
+            </TouchableOpacity>
+          </ScrollView>
         </TouchableOpacity>
       </TouchableOpacity>
     </Modal>
@@ -140,4 +155,3 @@ const UserPostOptions: React.FC<UserPostOptionsProps> = ({
 };
 
 export default UserPostOptions;
-

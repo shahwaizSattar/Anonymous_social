@@ -32,6 +32,14 @@ router.post('/:postId', authenticateToken, [
       });
     }
 
+    // Check if reactions are locked
+    if (post.interactions?.reactionsLocked) {
+      return res.status(403).json({
+        success: false,
+        message: 'Reactions are locked on this post'
+      });
+    }
+
     await post.addReaction(userId, reactionType);
 
     const updatedPost = await Post.findById(postId);

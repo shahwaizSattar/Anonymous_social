@@ -7,10 +7,10 @@ import Animated, { useSharedValue, useAnimatedStyle, withSpring } from 'react-na
 import { useTheme } from '../context/ThemeContext';
 import NotificationBell from '../components/NotificationBell';
 
-// Import screens (we'll create these)
+// Import screens
 import HomeScreen from '../screens/main/HomeScreen';
-import SearchScreen from '../screens/main/SearchScreen';
-import WhisperWallScreen from '../screens/main/WhisperWallScreen';
+import CityRadarScreen from '../screens/main/CityRadarScreen'; // 🌐 Location-based feature
+import WhisperWallScreen from '../screens/main/WhisperWallScreen'; // ✨ New WhisperWall feature
 import ProfileScreen from '../screens/main/ProfileScreen';
 import CreatePostScreen from '../screens/main/CreatePostScreen';
 import MessengerScreen from '../screens/main/MessengerScreen';
@@ -156,11 +156,11 @@ const TabNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name="Search"
-        component={SearchScreen}
+        name="CityRadar"
+        component={CityRadarScreen}
         options={{
           tabBarIcon: ({ focused }) => (
-            <TabIcon name="Search" focused={focused} icon="🔍" />
+            <TabIcon name="Radar" focused={focused} icon="🌐" />
           ),
         }}
       />

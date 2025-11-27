@@ -18,8 +18,19 @@ const postSchema = new mongoose.Schema({
       default: null
     },
     voiceNote: {
-      type: String,
-      default: null
+      url: {
+        type: String,
+        default: null
+      },
+      effect: {
+        type: String,
+        enum: ['none', 'deep', 'robot', 'soft', 'glitchy', 'girly', 'boyish'],
+        default: 'none'
+      },
+      duration: {
+        type: Number,
+        default: 0
+      }
     },
     media: [{
       url: {
@@ -92,10 +103,37 @@ const postSchema = new mongoose.Schema({
     enabled: { type: Boolean, default: false },
     duration: {
       type: String,
-      enum: ['1hour', '1day', '1week'],
+      enum: ['1hour', '6hours', '12hours', '24hours', '1day', '1week', 'custom'],
       default: '1day'
     },
+    customMinutes: { type: Number, min: 1, max: 10080 }, // Max 1 week in minutes
     vanishAt: Date
+  },
+  poll: {
+    enabled: { type: Boolean, default: false },
+    type: {
+      type: String,
+      enum: ['yesno', 'emoji', 'multi'],
+      default: 'yesno'
+    },
+    question: { type: String, maxlength: 200 },
+    options: [{
+      text: { type: String, maxlength: 100 },
+      emoji: String,
+      votes: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      voteCount: { type: Number, default: 0 }
+    }],
+    revealAfterVote: { type: Boolean, default: false },
+    totalVotes: { type: Number, default: 0 },
+    isAnonymous: { type: Boolean, default: true }
+  },
+  interactions: {
+    commentsLocked: { type: Boolean, default: false },
+    reactionsLocked: { type: Boolean, default: false }
+  },
+  oneTime: {
+    enabled: { type: Boolean, default: false },
+    viewedBy: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }]
   },
   trending: {
     score: { type: Number, default: 0 },
@@ -106,6 +144,18 @@ const postSchema = new mongoose.Schema({
     city: String,
     country: String,
     emoji: String
+  },
+  // Geospatial location for City Radar feature
+  geoLocation: {
+    type: {
+      type: String,
+      enum: ['Point']
+    },
+    coordinates: [Number] // [longitude, latitude]
+  },
+  locationEnabled: {
+    type: Boolean,
+    default: false
   },
   isAIGenerated: {
     image: { type: Boolean, default: false }
@@ -130,6 +180,7 @@ postSchema.index({ author: 1, createdAt: -1 });
 postSchema.index({ category: 1, createdAt: -1 });
 postSchema.index({ 'trending.score': -1 });
 postSchema.index({ 'vanishMode.vanishAt': 1 });
+postSchema.index({ geoLocation: '2dsphere' }); // Geospatial index for location queries
 
 // Calculate trending score
 postSchema.methods.calculateTrendingScore = function() {
@@ -196,8 +247,12 @@ postSchema.pre('save', function(next) {
   if (this.vanishMode.enabled && !this.vanishMode.vanishAt) {
     const durations = {
       '1hour': 60 * 60 * 1000,
+      '6hours': 6 * 60 * 60 * 1000,
+      '12hours': 12 * 60 * 60 * 1000,
+      '24hours': 24 * 60 * 60 * 1000,
       '1day': 24 * 60 * 60 * 1000,
-      '1week': 7 * 24 * 60 * 60 * 1000
+      '1week': 7 * 24 * 60 * 60 * 1000,
+      'custom': (this.vanishMode.customMinutes || 60) * 60 * 1000
     };
     this.vanishMode.vanishAt = new Date(Date.now() + durations[this.vanishMode.duration]);
   }

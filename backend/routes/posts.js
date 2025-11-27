@@ -1,6 +1,5 @@
 const express = require('express');
 const Post = require('../models/Post');
-const WhisperPost = require('../models/WhisperPost');
 const User = require('../models/User');
 const Notification = require('../models/Notification');
 const { authenticateToken, optionalAuth } = require('../middleware/auth');
@@ -26,26 +25,40 @@ router.post('/', authenticateToken, [
       });
     }
 
-    const { content, category, visibility, disguiseAvatar, vanishMode, tags } = req.body;
+    const { content, category, visibility, disguiseAvatar, vanishMode, tags, poll, interactions, oneTime, geoLocation, locationEnabled } = req.body;
     const userId = req.user._id;
 
-    // Validate that post has either text or media
-    if (!content.text?.trim() && (!content.media || content.media.length === 0)) {
+    // Validate that post has either text, media, voice note, or poll
+    if (!content.text?.trim() && 
+        (!content.media || content.media.length === 0) && 
+        !content.voiceNote?.url &&
+        !poll?.enabled) {
       return res.status(400).json({
         success: false,
-        message: 'Post must have either text content or media'
+        message: 'Post must have either text content, media, voice note, or poll'
       });
     }
 
-    const post = new Post({
+    const postData = {
       author: userId,
       content,
       category,
       visibility: visibility || 'normal',
       disguiseAvatar: visibility === 'disguise' ? disguiseAvatar : null,
       vanishMode: vanishMode || { enabled: false },
-      tags: tags || []
-    });
+      tags: tags || [],
+      poll: poll || { enabled: false },
+      interactions: interactions || { commentsLocked: false, reactionsLocked: false },
+      oneTime: oneTime || { enabled: false, viewedBy: [] }
+    };
+
+    // Add location data if provided
+    if (locationEnabled && geoLocation && geoLocation.coordinates && geoLocation.coordinates.length === 2) {
+      postData.geoLocation = geoLocation;
+      postData.locationEnabled = true;
+    }
+
+    const post = new Post(postData);
 
     console.log('💾 Saving post with content:', JSON.stringify(content, null, 2)); // Debug log
     await post.save();
@@ -127,6 +140,10 @@ router.get('/feed', authenticateToken, async (req, res) => {
       $or: [
         { 'vanishMode.enabled': false },
         { 'vanishMode.vanishAt': { $gt: new Date() } }
+      ],
+      // Exclude one-time posts that have been viewed by this user
+      $nor: [
+        { 'oneTime.enabled': true, 'oneTime.viewedBy': userId }
       ]
     };
 
@@ -134,50 +151,14 @@ router.get('/feed', authenticateToken, async (req, res) => {
       ? { $and: [ { $or: sourceFilters }, baseVisibilityFilters ] }
       : baseVisibilityFilters; // if no sources, show recent visible posts
 
-    // Get regular posts
+    // Get regular posts only (WhisperWall posts are separate)
     let posts = await Post.find(query)
     .populate('author', 'username avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
     .limit(parseInt(limit));
 
-    // Get WhisperWall posts
-    const whisperPosts = await WhisperPost.find({ isHidden: false })
-    .sort({ createdAt: -1 })
-    .limit(5); // Limit WhisperWall posts to avoid overwhelming the feed
-
-    // Convert WhisperWall posts to match regular post format
-    const formattedWhisperPosts = whisperPosts.map(post => ({
-      _id: post._id,
-      content: post.content,
-      category: post.category,
-      reactions: post.reactions,
-      comments: post.comments,
-      createdAt: post.createdAt,
-      author: {
-        username: `👻 ${post.randomUsername}`,
-        avatar: null
-      },
-      isWhisperWall: true,
-      expiresAt: post.expiresAt,
-      tags: post.tags
-    }));
-
-    // Combine posts and WhisperWall posts
-    const allPosts = [...posts, ...formattedWhisperPosts]
-      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-      .slice(0, parseInt(limit));
-
-    console.log('📥 Retrieved posts:', posts.length, 'WhisperWall posts:', whisperPosts.length); // Debug log
-    allPosts.forEach((post, index) => {
-      console.log(`📄 Post ${index + 1}:`, {
-        id: post._id,
-        text: post.content?.text,
-        mediaCount: post.content?.media?.length || 0,
-        media: post.content?.media,
-        isWhisperWall: post.isWhisperWall
-      }); // Debug log
-    });
+    console.log('📥 Retrieved posts:', posts.length); // Debug log
 
     // Fallback: if no matches for preferences/following, show recent visible posts
     if (posts.length === 0 && (userPrefs.length > 0 || followingIds.length > 0)) {
@@ -188,25 +169,23 @@ router.get('/feed', authenticateToken, async (req, res) => {
         .limit(parseInt(limit));
     }
 
-    // Calculate if user has reacted to each post
-    const postsWithUserReactions = allPosts.map(post => {
-      // Skip user reaction calculation for WhisperWall posts
-      if (post.isWhisperWall) {
-        return {
-          ...post,
-          userReaction: null,
-          userHasReacted: false
-        };
-      }
-      
+    // Calculate if user has reacted to each post and mark if outside preferences
+    const postsWithUserReactions = posts.map(post => {
       const userReaction = Object.keys(post.reactions).find(reactionType => 
         post.reactions[reactionType].some(r => r.user.equals(userId))
       );
       
+      // Check if post category is outside user's preferences
+      const isOutsidePreferences = post.category && 
+        userPrefs.length > 0 && 
+        !userPrefs.includes(post.category) &&
+        !post.author.equals(userId);
+      
       return {
         ...post.toObject(),
         userReaction: userReaction || null,
-        userHasReacted: !!userReaction
+        userHasReacted: !!userReaction,
+        isOutsidePreferences
       };
     });
 
@@ -234,10 +213,10 @@ router.get('/search', optionalAuth, async (req, res) => {
   try {
     const { q, category, page = 1, limit = 20 } = req.query;
     
-    if (!q || q.length < 2) {
+    if (!q || q.length < 1) {
       return res.status(400).json({
         success: false,
-        message: 'Search query must be at least 2 characters'
+        message: 'Search query must be at least 1 character'
       });
     }
 
@@ -456,6 +435,14 @@ router.post('/:postId/comments', authenticateToken, [
       });
     }
 
+    // Check if comments are locked
+    if (post.interactions?.commentsLocked) {
+      return res.status(403).json({
+        success: false,
+        message: 'Comments are locked on this post'
+      });
+    }
+
     const comment = {
       author: userId,
       content,
@@ -622,6 +609,7 @@ router.get('/user/:username', optionalAuth, async (req, res) => {
     const { username } = req.params;
     const { page = 1, limit = 20 } = req.query;
     const skip = (page - 1) * limit;
+    const viewerId = req.user?._id; // Current viewer's ID (if authenticated)
 
     const user = await User.findOne({ username });
     if (!user) {
@@ -631,14 +619,25 @@ router.get('/user/:username', optionalAuth, async (req, res) => {
       });
     }
 
-    const posts = await Post.find({
+    // Build query - if viewer is the post author, show all posts
+    // If viewer is someone else, exclude one-time posts they've already viewed
+    const query = {
       author: user._id,
       isHidden: false,
       $or: [
         { 'vanishMode.enabled': false },
         { 'vanishMode.vanishAt': { $gt: new Date() } }
       ]
-    })
+    };
+
+    // If viewer is NOT the post author, exclude one-time posts they've viewed
+    if (viewerId && !viewerId.equals(user._id)) {
+      query.$nor = [
+        { 'oneTime.enabled': true, 'oneTime.viewedBy': viewerId }
+      ];
+    }
+
+    const posts = await Post.find(query)
     .populate('author', 'username avatar')
     .sort({ createdAt: -1 })
     .skip(skip)
@@ -779,6 +778,202 @@ router.post('/:postId/report', authenticateToken, [
 
   } catch (error) {
     console.error('Report post error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// POST /api/posts/:postId/poll/vote - Vote on a poll
+router.post('/:postId/poll/vote', authenticateToken, [
+  body('optionIndex').isInt({ min: 0 }).withMessage('Valid option index required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { postId } = req.params;
+    const { optionIndex } = req.body;
+    const userId = req.user._id;
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found'
+      });
+    }
+
+    if (!post.poll.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'This post does not have a poll'
+      });
+    }
+
+    if (optionIndex >= post.poll.options.length) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid option index'
+      });
+    }
+
+    // Check if user already voted
+    const hasVoted = post.poll.options.some(option => 
+      option.votes.some(vote => vote.equals(userId))
+    );
+
+    if (hasVoted) {
+      // Remove previous vote
+      post.poll.options.forEach(option => {
+        const voteIndex = option.votes.findIndex(vote => vote.equals(userId));
+        if (voteIndex !== -1) {
+          option.votes.splice(voteIndex, 1);
+          option.voteCount = option.votes.length;
+        }
+      });
+      post.poll.totalVotes -= 1;
+    }
+
+    // Add new vote
+    post.poll.options[optionIndex].votes.push(userId);
+    post.poll.options[optionIndex].voteCount = post.poll.options[optionIndex].votes.length;
+    post.poll.totalVotes += 1;
+
+    await post.save();
+
+    res.json({
+      success: true,
+      message: 'Vote recorded successfully',
+      poll: {
+        options: post.poll.options.map(opt => ({
+          text: opt.text,
+          emoji: opt.emoji,
+          voteCount: opt.voteCount,
+          hasVoted: opt.votes.some(vote => vote.equals(userId))
+        })),
+        totalVotes: post.poll.totalVotes,
+        userHasVoted: true
+      }
+    });
+
+  } catch (error) {
+    console.error('Vote on poll error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// POST /api/posts/:postId/lock - Lock/unlock comments or reactions
+router.post('/:postId/lock', authenticateToken, [
+  body('lockType').isIn(['comments', 'reactions', 'both']).withMessage('Valid lock type required'),
+  body('locked').isBoolean().withMessage('Locked status required')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Validation failed',
+        errors: errors.array()
+      });
+    }
+
+    const { postId } = req.params;
+    const { lockType, locked } = req.body;
+    const userId = req.user._id;
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found'
+      });
+    }
+
+    // Check if user owns the post
+    if (!post.author.equals(userId)) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only lock your own posts'
+      });
+    }
+
+    if (lockType === 'comments' || lockType === 'both') {
+      post.interactions.commentsLocked = locked;
+    }
+    if (lockType === 'reactions' || lockType === 'both') {
+      post.interactions.reactionsLocked = locked;
+    }
+
+    await post.save();
+
+    res.json({
+      success: true,
+      message: `${lockType} ${locked ? 'locked' : 'unlocked'} successfully`,
+      interactions: post.interactions
+    });
+
+  } catch (error) {
+    console.error('Lock post error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error'
+    });
+  }
+});
+
+// POST /api/posts/:postId/mark-viewed - Mark one-time post as viewed
+router.post('/:postId/mark-viewed', authenticateToken, async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user._id;
+
+    const post = await Post.findById(postId);
+    
+    if (!post) {
+      return res.status(404).json({
+        success: false,
+        message: 'Post not found'
+      });
+    }
+
+    // Check if it's a one-time post
+    if (!post.oneTime?.enabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'This is not a one-time post'
+      });
+    }
+
+    // Check if already viewed
+    if (post.oneTime.viewedBy.includes(userId)) {
+      return res.status(200).json({
+        success: true,
+        message: 'Already marked as viewed'
+      });
+    }
+
+    // Add user to viewedBy array
+    post.oneTime.viewedBy.push(userId);
+    await post.save();
+
+    res.json({
+      success: true,
+      message: 'Post marked as viewed'
+    });
+
+  } catch (error) {
+    console.error('Mark viewed error:', error);
     res.status(500).json({
       success: false,
       message: 'Server error'

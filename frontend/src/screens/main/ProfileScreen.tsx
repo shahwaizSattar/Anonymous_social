@@ -10,13 +10,14 @@ import {
   Dimensions,
   RefreshControl,
 } from 'react-native';
+import { Video, ResizeMode, Audio } from 'expo-av';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { postsAPI } from '../../services/api';
 import Toast from 'react-native-toast-message';
-// import { VideoView } from 'expo-video';
+import { censorText } from '../../utils/censorUtils';
 
 const ProfileScreen: React.FC = () => {
   const { theme } = useTheme();
@@ -25,6 +26,8 @@ const ProfileScreen: React.FC = () => {
   const [userPosts, setUserPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [voiceNotePlaying, setVoiceNotePlaying] = useState<{ [key: string]: boolean }>({});
+  const [voiceSounds, setVoiceSounds] = useState<{ [key: string]: Audio.Sound }>({});
 
   const loadUserPosts = async () => {
     if (!user?.username) {
@@ -62,6 +65,131 @@ const ProfileScreen: React.FC = () => {
       loadUserPosts();
     }, [user?.username])
   );
+
+  const getVoiceEffectSettings = (effect?: string) => {
+    switch (effect) {
+      case 'deep':
+        return { rate: 0.8, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'soft':
+        return { rate: 0.9, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'robot':
+        return { rate: 1.0, pitchCorrectionQuality: Audio.PitchCorrectionQuality.Low };
+      case 'glitchy':
+        return { rate: 1.2, pitchCorrectionQuality: Audio.PitchCorrectionQuality.Low };
+      case 'girly':
+        return { rate: 1.15, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      case 'boyish':
+        return { rate: 0.85, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+      default:
+        return { rate: 1.0, pitchCorrectionQuality: Audio.PitchCorrectionQuality.High };
+    }
+  };
+
+  const playVoiceNote = async (postId: string, voiceUrl: string, effect?: string) => {
+    try {
+      if (voiceNotePlaying[postId] && voiceSounds[postId]) {
+        await voiceSounds[postId].pauseAsync();
+        setVoiceNotePlaying(prev => ({ ...prev, [postId]: false }));
+        return;
+      }
+
+      if (voiceSounds[postId]) {
+        const status = await voiceSounds[postId].getStatusAsync();
+        if (status.isLoaded) {
+          if (status.didJustFinish || (status.durationMillis && status.positionMillis >= status.durationMillis)) {
+            await voiceSounds[postId].replayAsync();
+          } else {
+            await voiceSounds[postId].playAsync();
+          }
+          setVoiceNotePlaying(prev => ({ ...prev, [postId]: true }));
+        }
+        return;
+      }
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: false,
+        playsInSilentModeIOS: true,
+      });
+
+      const playbackSettings = getVoiceEffectSettings(effect);
+
+      const { sound } = await Audio.Sound.createAsync(
+        { uri: voiceUrl },
+        { 
+          shouldPlay: true,
+          ...playbackSettings
+        },
+        (status) => {
+          if (status.isLoaded && status.didJustFinish) {
+            setVoiceNotePlaying(prev => ({ ...prev, [postId]: false }));
+          }
+        }
+      );
+
+      setVoiceSounds(prev => ({ ...prev, [postId]: sound }));
+      setVoiceNotePlaying(prev => ({ ...prev, [postId]: true }));
+    } catch (error) {
+      console.error('Error playing voice note:', error);
+      Toast.show({ type: 'error', text1: 'Error', text2: 'Failed to play voice note' });
+    }
+  };
+
+  const formatVoiceDuration = (seconds: number): string => {
+    if (seconds < 60) {
+      return `0:${seconds.toString().padStart(2, '0')}`;
+    }
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
+
+  const renderVoiceNote = (voiceNote: { url: string; effect?: string; duration?: number }, postId: string) => {
+    const voiceId = 'voice_' + postId;
+    const isPlaying = voiceNotePlaying[voiceId] || false;
+    const duration = voiceNote.duration || 0;
+
+    return (
+      <View style={styles.voiceNoteContainer}>
+        <TouchableOpacity
+          style={styles.voiceNoteButton}
+          onPress={(e) => {
+            e.stopPropagation();
+            playVoiceNote(voiceId, voiceNote.url, voiceNote.effect);
+          }}
+          activeOpacity={0.7}
+        >
+          <View style={styles.playButtonCircle}>
+            <Text style={styles.playButtonIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+          </View>
+          
+          <View style={styles.voiceWaveformContainer}>
+            <View style={styles.waveformBars}>
+              {[...Array(25)].map((_, i) => (
+                <View 
+                  key={i} 
+                  style={[
+                    styles.waveformBar,
+                    { 
+                      height: Math.random() * 16 + 8,
+                      backgroundColor: isPlaying ? '#00D4AA' : '#555'
+                    }
+                  ]} 
+                />
+              ))}
+            </View>
+            <View style={styles.voiceNoteFooter}>
+              <Text style={styles.voiceNoteDuration}>
+                {duration > 0 ? formatVoiceDuration(duration) : '0:00'}
+              </Text>
+              {voiceNote.effect && voiceNote.effect !== 'none' && (
+                <Text style={styles.voiceNoteEffect}>• {voiceNote.effect}</Text>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   const styles = StyleSheet.create({
     container: {
@@ -277,6 +405,83 @@ const ProfileScreen: React.FC = () => {
       fontSize: 16,
       marginTop: theme.spacing.lg,
     },
+    oneTimeBadge: {
+      backgroundColor: 'rgba(255, 107, 53, 0.15)',
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 20,
+      alignSelf: 'flex-start',
+      marginBottom: 12,
+    },
+    oneTimeBadgeText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: '#FF6B35',
+    },
+    lockIndicator: {
+      fontSize: 11,
+      color: theme.colors.error,
+      marginTop: 8,
+    },
+    voiceNoteContainer: {
+      marginVertical: 12,
+      backgroundColor: theme.colors.surface,
+      borderRadius: 20,
+      borderWidth: 1,
+      borderColor: theme.colors.border,
+      overflow: 'hidden',
+    },
+    voiceNoteButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 12,
+    },
+    playButtonCircle: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      backgroundColor: theme.colors.primary,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginRight: 12,
+    },
+    playButtonIcon: {
+      color: '#000',
+      fontSize: 16,
+      marginLeft: 2,
+    },
+    voiceWaveformContainer: {
+      flex: 1,
+      justifyContent: 'center',
+    },
+    waveformBars: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      height: 24,
+      gap: 2,
+      marginBottom: 4,
+    },
+    waveformBar: {
+      width: 2.5,
+      borderRadius: 2,
+      opacity: 0.8,
+    },
+    voiceNoteFooter: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    voiceNoteDuration: {
+      fontSize: 12,
+      fontWeight: '500',
+      color: theme.colors.textSecondary,
+    },
+    voiceNoteEffect: {
+      fontSize: 11,
+      color: theme.colors.primary,
+      textTransform: 'capitalize',
+      fontWeight: '500',
+    },
   });
 
   // Media renderer component
@@ -295,11 +500,15 @@ const ProfileScreen: React.FC = () => {
           keyExtractor={(item, index) => index.toString()}
           renderItem={({ item }) => (
             <View style={styles.mediaItem}>
-              {item.mimetype?.startsWith('video/') ? (
+              {item.type === 'video' || item.mimetype?.startsWith('video/') ? (
                 <View style={styles.videoContainer}>
-                  <View style={[styles.mediaContent, { width: mediaWidth * 0.8, backgroundColor: '#000', justifyContent: 'center', alignItems: 'center' }]}>
-                    <Text style={{ color: '#fff' }}>Video: {item.url}</Text>
-                  </View>
+                  <Video
+                    source={{ uri: item.url }}
+                    style={[styles.mediaContent, { width: mediaWidth * 0.8 }]}
+                    useNativeControls
+                    resizeMode={ResizeMode.CONTAIN}
+                    isLooping={false}
+                  />
                 </View>
               ) : (
                 <Image 
@@ -410,12 +619,29 @@ const ProfileScreen: React.FC = () => {
           <Text style={styles.loadingPosts}>Loading posts...</Text>
         ) : userPosts.length > 0 ? (
           userPosts.map((post: any) => (
-            <View key={post._id} style={styles.postCard}>
-              <Text style={styles.postCategory}>#{post.category}</Text>
-              {post.content.text && (
-                <Text style={styles.postText}>{post.content.text}</Text>
+            <TouchableOpacity 
+              key={post._id} 
+              style={styles.postCard}
+              onPress={() => (navigation as any).navigate('PostDetail', { postId: post._id })}
+            >
+              {post.category && <Text style={styles.postCategory}>#{post.category}</Text>}
+              
+              {/* One-Time Post Badge */}
+              {post.oneTime?.enabled && (
+                <View style={styles.oneTimeBadge}>
+                  <Text style={styles.oneTimeBadgeText}>
+                    ✨ One-Time Post • {post.oneTime.viewedBy?.length || 0} views
+                  </Text>
+                </View>
               )}
-              {renderMedia(post.content.media)}
+              
+              {/* Content */}
+              {post.content?.text && (
+                <Text style={styles.postText}>{censorText(post.content.text)}</Text>
+              )}
+              {post.content?.voiceNote?.url && renderVoiceNote(post.content.voiceNote, post._id)}
+              {renderMedia(post.content?.media)}
+              
               <View style={styles.postMeta}>
                 <Text style={styles.postDate}>
                   {new Date(post.createdAt).toLocaleDateString()}
@@ -423,11 +649,22 @@ const ProfileScreen: React.FC = () => {
                 <View style={styles.postReactions}>
                   <Text style={styles.reactionEmoji}>❤️</Text>
                   <Text style={styles.reactionText}>
-                    {post.reactionCounts?.total || 0} reactions
+                    {post.reactionCounts?.total || 0} • {post.comments?.length || 0} comments
                   </Text>
                 </View>
               </View>
-            </View>
+              
+              {/* Lock indicators */}
+              {(post.interactions?.reactionsLocked || post.interactions?.commentsLocked) && (
+                <Text style={styles.lockIndicator}>
+                  🔒 {post.interactions?.reactionsLocked && post.interactions?.commentsLocked 
+                    ? 'Reactions & Comments locked' 
+                    : post.interactions?.reactionsLocked 
+                      ? 'Reactions locked' 
+                      : 'Comments locked'}
+                </Text>
+              )}
+            </TouchableOpacity>
           ))
         ) : (
           <Text style={styles.emptyPosts}>
